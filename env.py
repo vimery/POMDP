@@ -137,8 +137,7 @@ class Vehicle:
     """
     a single vehicle's state and its attribute
     Each state has the following attribute:
-        pos: position of the vehicle, defined as distance to the center of the intersection.
-            Negative value means the vehicle is move toward the intersection.
+        x, y, theta: pose of the vehicle
         v: speed
         a: acceleration
         max_speed: speed limit of a road
@@ -147,8 +146,10 @@ class Vehicle:
     Attributes are: shape of the vehicle, action that can be take
     """
 
-    def __init__(self, pos=-10, v=0, a=0, max_speed=30, delta=4, intent=Intent.cautious):
-        self.pos = pos
+    def __init__(self, x=0, y=0, theta=0, v=0, a=0, max_speed=30, delta=4, intent=Intent.cautious):
+        self.x = x
+        self.y = y
+        self.theta = theta
         self.v = v
         self.a = a
         self.delta = delta
@@ -159,12 +160,14 @@ class Vehicle:
         self.action = None
 
     def collide(self, other):
-        # other vehicle's body is in collision area
-        if other.pos > - self.width / 2 and other.pos - other.length < self.width / 2:
-            # detect whether the ego vehicle is in
-            if self.pos > - other.width / 2 and self.pos - self.length < other.width / 2:
-                return True
-        return False
+        # using sphere model
+        dis = np.sqrt(np.sum(np.square(self.x - other.x), np.square(self.y - other.y)))
+        if dis > self.length + other.length:
+            return False
+        return True
+
+    def step(self, action, dt):
+        pass
 
 
 class State(object):
