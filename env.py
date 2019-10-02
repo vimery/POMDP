@@ -1,26 +1,175 @@
 import numpy as np
 from enum import Enum
 import random
-import pygame
+import math
 
-max_acc = 5
+
+class InterParam:
+    x_min = -20
+    x_max = 20
+    y_min = -20
+    inter_x = 0.0
+    inter_y = 0.0
+    inter_width = 6.0
+    inter_height = 6.0
+    num_lanes = 2
+
+    speed_limit = 10  # m/s
+
+
+class Segment:
+
+    def __init__(self, start_x, start_y, length, angle):
+        self.x = start_x
+        self.y = start_y
+        self.len = length
+        self.angle = angle
+
+    def move(self, vehicle_state, action, dt):
+        """
+        car moving when running at straight segment
+        :param vehicle_state: state of this vehicle
+        :param action: acceleration it will tack
+        :param dt: time interval
+        :return: new vehicle_state
+        """
+        s = vehicle_state.v + action * dt * dt / 2
+        x = s * math.cos(self.angle) + vehicle_state.x
+        y = s * math.sin(self.angle) + vehicle_state.y
+        v = vehicle_state.v + action * dt
+        theta = self.angle
+        return VehicleState(x, y, theta, v)
+
+    def contains(self, vehicle_state):
+        x = vehicle_state.x
+        y = vehicle_state.y
+        # horizontal
+        x_end = self.x + math.cos(self.angle) * self.len
+        y_end = self.y + math.sin(self.angle) * self.len
+        if self.angle % math.pi == 0:
+            return (self.x < x < x_end) or (x_end < x < self.x)
+        else:
+            return (self.y < y < y_end) or (y_end < y < self.y)
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
+
+class Connection:
+
+    def __init__(self, seg1, seg2):
+        # save seg
+        self.seg1 = seg1
+        self.seg2 = seg2
+        # radius of the connection, r==0 when it is a line
+        self.r = max(seg1.y, seg2.y) - min(seg1.y, seg2.y)
+        # order, clockwise: -1, anti-clockwise: 1
+        if seg1.x < seg2.x:
+            self.order = -1
+        else:
+            self.order = 1
+        # center of circle
+        if seg1.y < seg2.y:
+            self.y = seg1.y
+            self.x = seg2.x
+        else:
+            self.y = seg2.y
+            self.x = seg1.x
+
+    def is_line(self):
+        """
+        judge whether a Connection connect two seg with a line
+        :return: bool, is a line or not
+        """
+        return self.r == 0
+
+    def move(self, vehicle_state, action, dt):
+        """
+        car moving when running at intersection
+        :param vehicle_state: state of this vehicle
+        :param action: acceleration it will tack
+        :param dt: time interval
+        :return: new vehicle_state
+        """
+        s = vehicle_state.v * dt + action * dt * dt / 2
+        # if connection is a line
+        if self.is_line():
+            x = vehicle_state.x - self.order * s
+            v = vehicle_state.v + action * dt
+            return VehicleState(x, vehicle_state.y, vehicle_state.theta, v)
+        d_eta = s / self.r
+        eta = vehicle_state.theta - self.order * math.pi / 2 + self.order * d_eta
+        x = self.x + self.r * math.cos(eta)
+        y = self.y + self.r * math.sin(eta)
+        theta = vehicle_state.theta + self.order * d_eta
+        v = vehicle_state.v + action * dt
+        return VehicleState(x, y, theta, v)
+
+
+class RoadMap:
+
+    def __init__(self, segments, connections):
+        self.segs = segments
+        self.conns = connections
+
+    def get_connection(self, seg):
+        for conn in self.conns:
+            if seg == conn.seg1:
+                return seg
+        return None
 
 
 class Env:
 
-    def __init__(self):
+    def __init__(self, params):
         """
-        init simulation environment. Including state, action spaces, observation spaces
+        init simulation environment.
         """
-        self.state = None
-        self.actions = []
-        self.interval = 0.1
-        self.time = 0
-        self.max_time = 10
-        self.reward = 0.0
-        self.done = False
-        self.is_render = False
-        self.screen = None
+        roadMap = self._gen_T_inter(params)
+
+    def _gen_T_inter(self, params):
+        """
+        ——————————————————————————————————————————
+            <---- seg2   inter     <---- seg1
+        --------------           -----------------
+            ----> seg3             ----> seg4
+        ——————————————           —————————————————
+                     |     |     |
+                     | seg | seg |
+                     |  5  |  6  |
+                     |     |     |
+                     |     |     |
+                     |     |     |
+        :param params:
+        :return:
+        """
+        x_min = params.x_min
+        x_max = params.x_max
+        y_min = params.y_min
+        # position of intersection, default is (0,0)
+        inter_x = params.inter_x
+        inter_y = params.inter_y
+        # shape of intersection, default is square
+        inter_width = params.inter_width
+        inter_height = params.inter_height
+        # shape of line, default is 1/2 * inter_width
+        line_width = params.line_width
+
+        seg1 = Segment(x_max, line_width / 2, x_max - inter_x - inter_width / 2, math.pi)
+        seg2 = Segment(inter_x - inter_width / 2, line_width / 2, inter_x - x_min - inter_width / 2, math.pi)
+        seg3 = Segment(x_min, line_width / 2 * 3, inter_x - x_min - inter_width / 2, 0)
+        seg4 = Segment(inter_x + inter_width / 2, line_width / 2 * 3, x_max - inter_x - inter_width / 2, 0)
+        seg5 = Segment(inter_x - inter_width / 2, -inter_height, inter_y - inter_height - y_min, -math.pi / 2)
+        seg6 = Segment(inter_x + inter_width / 2, -inter_height, inter_y - inter_height - y_min, math.pi / 2)
+
+        conn12 = Connection(seg1, seg2)
+        conn34 = Connection(seg3, seg4)
+        conn15 = Connection(seg1, seg5)
+        conn35 = Connection(seg3, seg5)
+        conn62 = Connection(seg6, seg2)
+        conn64 = Connection(seg6, seg4)
+
+        return RoadMap([seg1, seg2, seg3, seg4, seg5, seg6], [conn12, conn34, conn15, conn35, conn62, conn64])
 
     def reset(self):
         """
@@ -39,13 +188,13 @@ class Env:
         """
         show graphic image of simulator
         """
-        if not self.is_render:
-            pygame.init()
-            self.screen = pygame.display.set_mode((400, 400), 0, 32)
-        ego_loc, car_loc = self._transform()
-        ego = pygame.Rect(ego_loc)
-        car = pygame.Rect(car_loc)
-        self.is_render = True
+        # if not self.is_render:
+        #     pygame.init()
+        #     self.screen = pygame.display.set_mode((400, 400), 0, 32)
+        # ego_loc, car_loc = self._transform()
+        # ego = pygame.Rect(ego_loc)
+        # car = pygame.Rect(car_loc)
+        # self.is_render = True
 
     def _transition(self, action):
         # state change of ego vehicle
@@ -168,6 +317,16 @@ class Vehicle:
 
     def step(self, action, dt):
         pass
+
+
+class VehicleState:
+
+    def __init__(self, x=0, y=0, theta=0, v=0, locate=None):
+        self.x = x
+        self.y = y
+        self.theta = theta
+        self.v = v
+        self.locate = locate
 
 
 class State(object):
