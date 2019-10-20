@@ -1,5 +1,5 @@
 from env import Env
-from env import InterParam
+from tools import InterParam
 from agent import Constant
 
 if __name__ == '__main__':
@@ -12,6 +12,7 @@ if __name__ == '__main__':
     while True:
         action = agent.get_action()
         new_state, done = env.step(action)
+        env.render()
         if done:
             break
         print("current step is: {}".format(step))

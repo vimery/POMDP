@@ -1,25 +1,20 @@
+#!/usr/bin/env python3
+
+# ==============================================================================
+# -- imports -------------------------------------------------------------------
+# ==============================================================================
+
 import numpy as np
 from enum import Enum
 import random
 import math
 import uuid
+from tools import *
 
-
-class InterParam:
-    """
-    InterParam: parameters for constructing an intersection
-    """
-    x_min = -20.0
-    x_max = 20.0
-    y_min = -20.0
-    inter_x = 0.0
-    inter_y = 0.0
-    inter_width = 6.0
-    inter_height = 6.0
-    line_width = inter_width / 3
-    num_lanes = 2
-
-    max_speed = 3.0  # m/s
+try:
+    import pygame as pg
+except ImportError:
+    render = False
 
 
 class Segment:
@@ -27,22 +22,25 @@ class Segment:
     Segment: a straight road
     """
 
-    def __init__(self, start_x, start_y, length, angle, max_speed=3):
+    def __init__(self, start_x, start_y, length, width, angle, max_speed=3):
         """
         Constructor, define the start point, length, angle relative to coordinate and max speed
         :param start_x: start point in x axis
         :param start_y: start point in y axis
         :param length: length of road
+        :param width: width of road
         :param angle: angle relative to coordinate axis. The angle of x axis is 0
         :param max_speed: speed limits of the road
         """
         self.x = start_x
         self.y = start_y
+        self.width = width
         self.len = length
         self.angle = angle
         self.x_end = self.x + math.cos(self.angle) * self.len
         self.y_end = self.y + math.sin(self.angle) * self.len
         self.max_speed = max_speed
+        self.horizon = self.angle % math.pi == 0
 
     def move(self, traveling_state, action, dt):
         """
@@ -67,8 +65,7 @@ class Segment:
         :return: bool, is in
         """
         epsilon = 1e-6
-        if self.angle % math.pi == 0:
-            # horizontal
+        if self.horizon:
             return (self.x - epsilon <= x <= self.x_end + epsilon) or (self.x_end - epsilon <= x <= self.x + epsilon)
         else:
             # vertical
@@ -87,6 +84,20 @@ class Segment:
 
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
+
+    def render(self, surface):
+        if self.horizon:
+            start_1 = cartesian2py(Point(self.x, self.y - self.width / 2))
+            start_2 = cartesian2py(Point(self.x, self.y + self.width / 2))
+            end_1 = cartesian2py(Point(self.x_end, self.y_end - self.width / 2))
+            end_2 = cartesian2py(Point(self.x_end, self.y_end + self.width / 2))
+        else:
+            start_1 = cartesian2py(Point(self.x - self.width / 2, self.y))
+            start_2 = cartesian2py(Point(self.x + self.width / 2, self.y))
+            end_1 = cartesian2py(Point(self.x_end - self.width / 2, self.y_end))
+            end_2 = cartesian2py(Point(self.x_end + self.width / 2, self.y_end))
+        pg.draw.line(surface, Color.black, start_1, end_1, 2)
+        pg.draw.line(surface, Color.black, start_2, end_2, 2)
 
 
 class Connection:
@@ -158,6 +169,9 @@ class Connection:
             v = traveling_state.v + action * dt
         return TravelingState(x, y, theta, v)
 
+    def render(self, surface):
+        pass
+
 
 class RoadMap:
     """
@@ -196,6 +210,12 @@ class RoadMap:
             available.append(conn.seg1)
         return available
 
+    def render(self, surface):
+        for seg in self.segs:
+            seg.render(surface)
+        for conn in self.conns:
+            conn.render(surface)
+
 
 def _gen_T_inter(params):
     """
@@ -227,12 +247,17 @@ def _gen_T_inter(params):
     # speed limit
     max_speed = params.max_speed
 
-    seg1 = Segment(x_max, -line_width / 2, x_max - inter_x - inter_width / 2, math.pi, max_speed)
-    seg2 = Segment(inter_x - inter_width / 2, -line_width / 2, inter_x - x_min - inter_width / 2, math.pi, max_speed)
-    seg3 = Segment(x_min, -line_width / 2 * 3, inter_x - x_min - inter_width / 2, 0, max_speed)
-    seg4 = Segment(inter_x + inter_width / 2, -line_width / 2 * 3, x_max - inter_x - inter_width / 2, 0, max_speed)
-    seg5 = Segment(inter_x - inter_width / 2, -inter_height, inter_y - inter_height - y_min, -math.pi / 2, max_speed)
-    seg6 = Segment(inter_x + inter_width / 2, y_min, inter_y - inter_height - y_min, math.pi / 2, max_speed)
+    seg1 = Segment(x_max, -line_width / 2, x_max - inter_x - inter_width / 2, line_width, math.pi, max_speed)
+    seg2 = Segment(inter_x - inter_width / 2, -line_width / 2, inter_x - x_min - inter_width / 2, line_width, math.pi,
+                   max_speed)
+    seg3 = Segment(x_min, -line_width / 2 * 3, inter_x - x_min - inter_width / 2, line_width, 0, max_speed)
+    seg4 = Segment(inter_x + inter_width / 2, -line_width / 2 * 3, x_max - inter_x - inter_width / 2, line_width, 0,
+                   max_speed)
+    seg5 = Segment(inter_x - inter_width / 2 + line_width / 2, -inter_height, inter_y - inter_height - y_min,
+                   line_width, -math.pi / 2,
+                   max_speed)
+    seg6 = Segment(inter_x + inter_width / 2 - line_width / 2, y_min, inter_y - inter_height - y_min, line_width,
+                   math.pi / 2, max_speed)
 
     conn12 = Connection(seg1, seg2)
     conn34 = Connection(seg3, seg4)
@@ -262,7 +287,7 @@ class Vehicle:
     Attributes are: shape of the vehicle, action that can be take
     """
 
-    def __init__(self, state, locate, goal, road_map, max_speed=16, max_acc=3):
+    def __init__(self, state, locate, goal, road_map, image, max_speed=16, max_acc=3):
         self.id = uuid.uuid4()
         self.state = state  # TravelingState
         self.max_speed = max_speed
@@ -273,6 +298,7 @@ class Vehicle:
         self.locate = locate  # which segment or connection
         self.goal = goal  # where to go
         self.map = road_map  # road map of current environment
+        self.image = loadImage(image)
         self.exist = True  # whether exists
 
     def collide(self, other):
@@ -310,6 +336,9 @@ class Vehicle:
 
     def __ne__(self, other):
         return self.id != other.id
+
+    def render(self, surface):
+        image = pg.transform.rotate(self.image, self.state.theta / math.pi * 180)
 
 
 class Observations:
@@ -352,6 +381,15 @@ class Env:
         self.action_space = []
         self.done = False  # done
         self.dt = 0.1  # s, interval
+        # pygame
+        pg.init()
+        self.scale = 10
+        self.size_x = (params.x_max - params.x_min) * self.scale
+        self.size_y = - params.y_min * self.scale
+        self.win = pg.display.set_mode((self.size_x, self.size_y))
+        pg.display.set_caption("Autonomous driving simulator")
+        self.background = self.win.fill(Color.white, (0, 0, self.size_x, self.size_y))
+        self.font = pg.font.SysFont("arial", 16)
         self.reset()
 
     def reset(self):
@@ -375,6 +413,9 @@ class Env:
         # === done ===
         self.done = False
 
+        # === pygame ===
+        self.render()
+
         return self.observation
 
     def _gen_vehicle_random(self):
@@ -396,10 +437,10 @@ class Env:
         locate = random.choice(self.road_map.get_available_starts())
         x, y = locate.get_random_point()
         theta = locate.angle
-        v = random.randrange(locate.max_speed)
+        v = random.randrange(1, locate.max_speed)
         state = TravelingState(x, y, theta, v)
         goal = random.choice(self.road_map.get_available_goals(locate))
-        vehicle = Vehicle(state, locate, goal, self.road_map)
+        vehicle = Vehicle(state, locate, goal, self.road_map, "other_vehicle.png")
         # add to state
         return vehicle
 
@@ -407,82 +448,23 @@ class Env:
         locate = self.road_map.segs[5]
         state = TravelingState(locate.x, locate.y, locate.angle, 1)
         goal = self.road_map.segs[1]
-        return Vehicle(state, locate, goal, self.road_map)
+        return Vehicle(state, locate, goal, self.road_map, "vehicle.png")
 
     def render(self):
         """
         show graphic image of simulator
         """
-        # if not self.is_render:
-        #     pygame.init()
-        #     self.screen = pygame.display.set_mode((400, 400), 0, 32)
-        # ego_loc, car_loc = self._transform()
-        # ego = pygame.Rect(ego_loc)
-        # car = pygame.Rect(car_loc)
-        # self.is_render = True
+        # erase window
+        self._draw_background(Color.white)
+        # draw road_map
+        self.road_map.render(self.win)
+        # draw vehicles
+        for vehicle in self.state:
+            vehicle.render(self.win)
+        pg.display.update()
 
-    def _transition(self, action):
-        # state change of ego vehicle
-        self.state.ego.v += self.interval * action
-        self.state.ego.pos += (self.interval ** 2) * action / 2
-        # state change of other vehicle
-        self.state.car.pos += self.state.car.v * self.interval
-        # compute reward before update acceleration
-        self.reward = self._get_reward__()
-        self.state.ego.a = action
-
-    def _transform(self):
-        ego = self.state.ego
-        car = self.state.car
-        ego_loc = ((-ego.width / 2, ego.pos), (ego.width / 2, ego.pos - ego.length))
-        car_loc = ((car.pos - car.length, car.width / 2), (car.pos, -car.width / 2))
-        return ego_loc, car_loc
-
-    def _compute_action(self):
-        action = Action()
-        state = self.state
-        self.actions.clear()
-        # self.actions.append(-1)
-        self.actions.append(0)
-        self.actions.append(1)
-        # self.actions.append(action.keep_speed(state.ego.v))
-        # self.actions.append(action.keep_distance(state.ego, state.car))
-        # self.actions[2] = action.keep_distance(state.ego, state.cars[0])
-        # self.actions[3] = action.keep_distance(state.ego, state.cars[1])
-        # self.actions[4] = action.keep_distance(state.ego, state.cars[2])
-        # self.actions[5] = action.keep_distance(state.ego, state.cars[3])
-
-    def _get_reward__(self):
-        self.done = True
-        if self._success():
-            return 1.0 - self.time / self.max_time
-        if self._failure():
-            return -2.0
-        if self._time_out():
-            return -0.1
-        self.done = False
-        return 0
-
-    def _success(self):
-        ego = self.state.ego
-        # success when the ego vehicle pass the intersection
-        if ego.pos - ego.length > ego.delta:
-            return True
-        return False
-
-    def _failure(self):
-        # collide
-        if self.state.ego.collide(self.state.car):
-            return True
-        return False
-
-    def _time_out(self):
-        if self.time > self.max_time:
-            return True
-        return False
-
-    # def _done(self):
-    #     return self._success() or not self._failure()
+    def _draw_background(self, color):
+        self.win.fill(color, self.background)
 
     def step(self, action):
         """
@@ -510,21 +492,6 @@ class Intent(Enum):
     take_way = 1
     give_way = 2
     cautious = 3
-
-
-class State(object):
-    """
-    State represents the whole environment including four vehicles' state and the ego vehicle's state.
-    """
-
-    def __init__(self):
-        self.ego = Vehicle(-random.randint(4, 10))
-        self.car = Vehicle(-random.randint(4, 10), 10)
-        # self.cars = []
-        # self.cars_count = 0  # random.randint(1, 4)
-        # for i in range(self.cars_count):
-        #     self.cars[i] = Vehicle(random.randint(4, 10), 0, 0, 4, random.randint(1, 3))
-        #     self.cars[i].action =
 
 
 class Action:
