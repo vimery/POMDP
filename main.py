@@ -14,6 +14,7 @@ if __name__ == '__main__':
         new_state, done = env.step(action)
         env.render()
         if done:
+            print(done)
             break
         print("current step is: {}".format(step))
         print("current position of vehicles are: ")

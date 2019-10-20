@@ -1,12 +1,23 @@
 import os
 import pygame as pg
+from pygame.locals import *
+
+# error of float number
+epsilon = 1e-10
+# max step number
+max_steps = 1000
+
+
+class Color:
+    white = (255, 255, 255)
+    black = (0, 0, 0)
 
 
 def cartesian2py(point):
-    return point.x * 10 + 200, - point.y * 10
+    return Point(point.x * 10 + 200, - point.y * 10)
 
 
-def loadImage(name):
+def loadImage(name, colorkey=Color.white):
     fullname = os.path.join("data", name)
     try:
         image = pg.image.load(fullname)
@@ -14,6 +25,7 @@ def loadImage(name):
         print("Cannot load image", name)
         raise SystemExit(message)
     image = image.convert()
+    image.set_colorkey(colorkey, RLEACCEL)
     return image
 
 
@@ -22,11 +34,6 @@ class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-
-
-class Color:
-    white = (255, 255, 255)
-    black = (0, 0, 0)
 
 
 class InterParam:
