@@ -22,6 +22,32 @@
 #     for event in pygame.event.get():
 #         if event.type == pygame.QUIT:
 #             sys.exit(0)
+import pygame as pg
+from roadmap import *
+from tools import *
+pg.init()
+win = pg.display.set_mode((400, 400))
+pg.display.set_caption("Autonomous driving simulator")
+background = win.fill(Color.white, (0, 0, 400, 400))
+font = pg.font.SysFont("arial", 16)
 
-a = [1, 2, 3, 4, 5]
-del a[2]
+params = InterParam()
+x_min = params.x_min
+x_max = params.x_max
+y_min = params.y_min
+# position of intersection, default is (0,0)
+inter_x = params.inter_x
+inter_y = params.inter_y
+# shape of intersection, default is square
+inter_width = params.inter_width
+inter_height = params.inter_height
+# shape of line, default is 1/2 * inter_width
+line_width = params.line_width
+# speed limit
+max_speed = params.max_speed
+
+seg1 = Segment(x_max, -line_width / 2, x_max - inter_x - inter_width / 2, line_width, math.pi, max_speed)
+seg1.render(win)
+pg.display.update()
+pg.time.wait(5000)
+

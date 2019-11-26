@@ -1,6 +1,7 @@
 import os
 import pygame as pg
 from pygame.locals import *
+import math
 
 # error of float number
 epsilon = 1e-10
