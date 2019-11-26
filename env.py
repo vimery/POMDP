@@ -4,16 +4,19 @@
 # -- imports -------------------------------------------------------------------
 # ==============================================================================
 
-import numpy as np
-from enum import Enum
 import random
-import math
-from tools import *
-from vehicle import Vehicle
-from vehicle import TravelingState
-from roadmap import RoadMap
-from roadmap import Segment
+from enum import Enum
+
 from roadmap import Connection
+from roadmap import RoadMap
+from roadmap import Route
+from roadmap import Segment
+from tools import *
+from model import *
+from vehicle import Vehicle
+
+# max step number
+max_steps = 1000
 
 
 def _gen_T_inter(params):
@@ -65,7 +68,14 @@ def _gen_T_inter(params):
     conn62 = Connection(seg6, seg2)
     conn64 = Connection(seg6, seg4)
 
-    return RoadMap([seg1, seg2, seg3, seg4, seg5, seg6], [conn12, conn34, conn15, conn35, conn62, conn64])
+    route12 = Route(seg1, conn12, seg2)
+    route34 = Route(seg3, conn34, seg4)
+    route15 = Route(seg1, conn15, seg5)
+    route35 = Route(seg3, conn35, seg5)
+    route62 = Route(seg6, conn62, seg2)
+    route64 = Route(seg6, conn64, seg4)
+
+    return RoadMap([route12, route34, route15, route35, route62, route64])
 
 
 class Observations:
@@ -101,13 +111,12 @@ class Env:
         """
         init simulation environment.
         """
-        self.params = params  # save params
-        self.road_map = None  # map
-        self.state = []  # state, that is a vehicle container
+        self.road_map = _gen_T_inter(params)  # get map
+        self.vehicles = []
         self.observation = None
         self.action_space = []
-        self.dt = 0.5  # s, interval
-        self.count = 0  # step count1
+        self.dt = 0.2  # s, interval
+        self.step_count = 0
         # pygame
         pg.init()
         self.scale = 10
@@ -124,51 +133,43 @@ class Env:
         reset the environment
         :return: observation after reset
         """
-        self.road_map = _gen_T_inter(self.params)  # get map
-
         # === state ===
-        self.state.clear()  # clean
-        self.state.append(self._gen_vehicle_fix())  # add ego vehicle, at 0
+        self.vehicles.clear()  # clean
+        self.vehicles.append(self._gen_vehicle_fix())  # add ego vehicle, at 0
         # add random other vehicles
-        for i in range(2):
-            self.state.append(self._gen_vehicle_random())
+        # for i in range(2):
+        #     self.vehicles.append(self._get_random_vehicle())
         self.action_space = [-1, 0, 1]
-
-        # === observation ===
-        self.observation = Observations(self, self.state[0])
 
         # === pygame ===
         self.render()
 
         return self.observation
 
-    def _gen_vehicle_random(self):
+    def _get_random_vehicle(self):
         """
-        generate a vehicle in a random segment
+        generate a vehicle in a random route
         :return:
         """
-        # get all segments that are not occupied
-        available = self.road_map.get_available_starts()
-        for seg in available:
-            for vehicle in self.state:
-                if vehicle.locate == seg:
-                    available.remove(seg)
+        # get all routes that are not occupied
+        available = self.road_map.routes
+        for route in available:
+            if route == route:
+                available.remove(route)
         # generate a vehicle
         locate = random.choice(available)
         x, y = locate.get_random_point()
         theta = locate.angle
         v = random.randrange(1, locate.max_speed)
-        state = TravelingState(x, y, theta, v)
-        goal = random.choice(self.road_map.get_available_goals(locate))
-        vehicle = Vehicle(state, locate, goal, self.road_map, "other_vehicle.png")
+        state = VehicleState(x, y, theta, v)
+        vehicle = Vehicle(state, "other_vehicle.png")
         # add to state
         return vehicle
 
     def _gen_vehicle_fix(self):
-        locate = self.road_map.segs[5]
-        state = TravelingState(locate.x, locate.y, locate.angle, 1)
-        goal = self.road_map.segs[1]
-        return Vehicle(state, locate, goal, self.road_map, "vehicle.png")
+        route = self.road_map.routes[4]
+        state = VehicleState(route.seg1.x, route.seg1.y, route.seg1.theta, route, 1)
+        return Vehicle(state, "vehicle.png")
 
     def render(self):
         """
@@ -179,8 +180,12 @@ class Env:
         # draw road_map
         self.road_map.render(self.win)
         # draw vehicles
-        for vehicle in self.state:
+        for vehicle in self.vehicles:
             vehicle.render(self.win)
+        # quit event
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
         pg.display.update()
         pg.time.wait(100)
 
@@ -188,15 +193,15 @@ class Env:
         self.win.fill(back_color, self.background)
 
     def success(self):
-        if not self.state:
+        if not self.vehicles:
             return True
         return False
 
     def over_time(self):
-        return self.count > max_steps
+        return self.step_count > max_steps
 
     def collide(self):
-        return self.state[0].collide(self.state[1:])
+        return self.vehicles[0].collide(self.vehicles[1:])
 
     def done(self):
         if self.success():
@@ -218,12 +223,12 @@ class Env:
         done: the simulation is finished,
         info: debug message
         """
-        for vehicle in self.state:
+        for vehicle in self.vehicles:
             vehicle.step(action, self.dt)
             if not vehicle.exist:
-                self.state.remove(vehicle)
-        self.count += 1
-        return self.state, self.done()
+                self.vehicles.remove(vehicle)
+        self.step_count += 1
+        return self.vehicles, self.done()
 
     def __del__(self):
         pass
