@@ -11,7 +11,8 @@ class Color:
 
 
 def cartesian2py(x, y):
-    return round(x * 10 + 200), round(- y * 10 + 10)
+    scale = InterParam.scale
+    return round(x * scale + InterParam.x_max * scale), round(- y * scale + InterParam.y_max * scale + scale)
 
 
 def loadImage(name, colorkey=Color.white):
@@ -69,11 +70,11 @@ class InterParam:
     x_min = -20
     x_max = 20
     y_min = -20
+    y_max = 20
     inter_x = 0.0
     inter_y = 0.0
-    inter_width = 6.0
-    inter_height = 6.0
-    line_width = inter_width / 2
+    inter_width = 8.0
     num_lanes = 2
+    scale = 10
 
     max_speed = 3.0  # m/s

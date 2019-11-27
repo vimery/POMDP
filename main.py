@@ -8,16 +8,14 @@ if __name__ == '__main__':
     state = env.reset()
     agent = Constant()
 
-    step = 0
     while True:
-        action = agent.get_action()
-        new_state, done = env.step(action)
+        action = agent.get_action(state)
+        new_state, done, step = env.step(action)
         env.render()
         if done:
             print(done)
-            break
+            state = env.reset()
         print("current step is: {}".format(step))
         print("current position of vehicles are: ")
         for vehicle in new_state:
-            print("x: {}, y: {}".format(vehicle.state.x, vehicle.state.y))
-        step += 1
+            print("x: {}, y: {}".format(vehicle.x, vehicle.y))

@@ -1,5 +1,5 @@
-import random
 import uuid
+
 from tools import *
 
 pi = math.pi
@@ -44,32 +44,10 @@ class Segment:
         return x + math.cos(self.theta) * distance, y + math.sin(self.theta) * distance, theta
 
     def contains(self, x, y):
-        """
-        define whether a point is in the segment
-        :param x: x
-        :param y: y
-        :return: bool, is in
-        """
-        # if self._horizon:
-        #     return (self.x - epsilon <= x <= self.x_end + epsilon) or (self.x_end - epsilon <= x <= self.x + epsilon)
-        # else:
-        #     # vertical
-        #     return (self.y - epsilon <= y <= self.y_end + epsilon) or (self.y_end - epsilon <= y <= self.y + epsilon)
         return self._x_min <= x <= self._x_max and self._y_min <= y <= self._y_max
 
     def get_distance_to_end(self, x, y):
         return abs(self.y_end - y) + abs(self.x_end - x)
-
-    def get_random_point(self):
-        """
-        get a random point in this segment
-        :return:
-        """
-        if self.theta % pi == 0:
-            # horizontal
-            return self.x + random.random() * (self.x_end - self.x), self.y
-        else:
-            return self.x, self.y + random.random() * (self.y_end - self.y)
 
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
@@ -119,6 +97,8 @@ class Connection:
         :param seg2:
         """
         self.id = seg1.id + seg2.id
+        self.x_end = seg2.x
+        self.y_end = seg2.y
         # if this is a line, theta is the direction of this line
         self.theta = seg1.theta
 
@@ -163,13 +143,15 @@ class Connection:
         return self._x_min <= x <= self._x_max and self._y_min <= y <= self._y_max
 
     def get_distance_to_end(self, x, y):
-        return abs(self.r * (math.atan2(y - self.y, x - self.x) + h_pi - self.theta - self.left_turn * h_pi))
+        if self.r == 0:
+            return abs(self.x_end - x) + abs(self.y_end - y)
+        return self.r * abs(math.atan2(y - self.y, x - self.x) - self.theta)
 
     def next(self, x, y, theta, distance):
         if self.r == 0:
-            return x + math.cos(self.theta) * distance, y + math.sin(self.theta) * distance
-        delta_theta = distance / self.r
-        new_theta = delta_theta + self.left_turn * math.atan2(y - self.y, x - self.x)
+            return x + math.cos(self.theta) * distance, y + math.sin(self.theta) * distance, theta
+        delta_theta = self.left_turn * distance / self.r
+        new_theta = delta_theta + math.atan2(y - self.y, x - self.x)
         return self.x + self.r * math.cos(new_theta), self.y + self.r * math.sin(new_theta), theta + delta_theta
 
     def render(self, surface):
@@ -215,7 +197,7 @@ class Route:
         if sec.contains(next_x, next_y):
             return next_x, next_y, theta
         else:
-            return self.next(sec2.x, sec2.y, sec2.theta, distance - sec.get_distance_to_end(x, y))
+            return self.next(sec.x_end, sec.y_end, sec2.theta, distance - sec.get_distance_to_end(x, y))
 
     def render(self, surface):
         self.seg1.render(surface)
