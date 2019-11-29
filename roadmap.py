@@ -14,7 +14,7 @@ class Segment:
     Segment: a straight road
     """
 
-    def __init__(self, start_x, start_y, length, width, theta, max_speed=3):
+    def __init__(self, s_id, start_x, start_y, length, width, theta, max_speed=4):
         """
         Constructor, define the start point, length, angle relative to coordinate and max speed
         :param start_x: start point in x axis
@@ -24,7 +24,7 @@ class Segment:
         :param theta: angle relative to coordinate axis. The angle of x axis is 0
         :param max_speed: speed limits of the road
         """
-        self.id = uuid.uuid4().__str__()
+        self.id = s_id
         self.x = start_x
         self.y = start_y
         self.width = width
@@ -35,10 +35,10 @@ class Segment:
         self.max_speed = max_speed
 
         # rect
-        self._x_min = min(self.x, self.x_end)
-        self._y_min = min(self.y, self.y_end)
-        self._x_max = max(self.x, self.x_end)
-        self._y_max = max(self.y, self.y_end)
+        self._x_min = min(self.x, self.x_end) - epsilon
+        self._y_min = min(self.y, self.y_end) - epsilon
+        self._x_max = max(self.x, self.x_end) + epsilon
+        self._y_max = max(self.y, self.y_end) + epsilon
 
     def next(self, x, y, theta, distance):
         return x + math.cos(self.theta) * distance, y + math.sin(self.theta) * distance, theta
@@ -90,7 +90,7 @@ class Connection:
                      |     |     |
     """
 
-    def __init__(self, seg1, seg2, max_speed=3):
+    def __init__(self, seg1, seg2, max_speed=4):
         """
         Constructor. Define the center, radius, left_turn of the connection
         :param seg1:
@@ -106,7 +106,8 @@ class Connection:
         if seg1.theta == seg2.theta:
             # radius, if r == 0, it's a line
             self.r = 0
-        elif seg1.theta < seg2.theta or (seg1.theta == pi and seg2.theta == nh_pi):
+        elif (seg1.theta < seg2.theta and (seg1.theta != nh_pi or seg2.theta != pi)) or (
+                seg1.theta == pi and seg2.theta == nh_pi):
             # left turn, r is 1.5 width
             self.left_turn = 1
             self.r = seg1.width * 1.5
@@ -132,10 +133,10 @@ class Connection:
                 self.x = seg2.x
 
         # get rect
-        self._x_min = min(seg1.x_end, seg2.x)
-        self._x_max = max(seg1.x_end, seg2.x)
-        self._y_min = min(seg1.y_end, seg2.y)
-        self._y_max = max(seg1.y_end, seg2.y)
+        self._x_min = min(seg1.x_end, seg2.x) - epsilon
+        self._x_max = max(seg1.x_end, seg2.x) + epsilon
+        self._y_min = min(seg1.y_end, seg2.y) - epsilon
+        self._y_max = max(seg1.y_end, seg2.y) + epsilon
 
         self.max_speed = max_speed
 
@@ -145,7 +146,40 @@ class Connection:
     def get_distance_to_end(self, x, y):
         if self.r == 0:
             return abs(self.x_end - x) + abs(self.y_end - y)
-        return self.r * abs(math.atan2(y - self.y, x - self.x) - self.theta)
+        delta_angle = math.atan2(y - self.y, x - self.x) - self.theta
+        if delta_angle > pi or delta_angle < -pi:
+            delta_angle %= pi
+        return self.r * abs(delta_angle)
+
+    def get_occupancy(self):
+        if self.r == 0:
+            if self.theta % pi == 0:
+                if self.y_end > 0:
+                    return ["1", "2"]
+                else:
+                    return ["3", "4"]
+        if self.left_turn == 1:
+            if self.x > 0:
+                if self.y > 0:
+                    return ["1", "3", "4"]
+                else:
+                    return ["1", "2", "3"]
+            else:
+                if self.y > 0:
+                    return ["2", "3", "4"]
+                else:
+                    return ["1", "2", "4"]
+        else:
+            if self.y_end > 0:
+                if self.x_end > 0:
+                    return ["2"]
+                else:
+                    return ["1"]
+            else:
+                if self.x_end > 0:
+                    return ["4"]
+                else:
+                    return ["3"]
 
     def next(self, x, y, theta, distance):
         if self.r == 0:
@@ -199,10 +233,24 @@ class Route:
         else:
             return self.next(sec.x_end, sec.y_end, sec2.theta, distance - sec.get_distance_to_end(x, y))
 
+    def get_max_speed(self, x, y):
+        if self.seg2.contains(x, y):
+            return self.seg2.max_speed
+        elif self.conn.contains(x, y):
+            return self.conn.max_speed
+        else:
+            return self.seg1.max_speed
+
     def render(self, surface):
         self.seg1.render(surface)
         self.seg2.render(surface)
         self.conn.render(surface)
+
+    def get_occupancy(self):
+        occupancy = self.conn.get_occupancy()
+        occupancy.insert(0, self.seg1.id)
+        occupancy.insert(0, self.seg2.id)
+        return occupancy
 
     def __eq__(self, other):
         return self.conn == other.conn

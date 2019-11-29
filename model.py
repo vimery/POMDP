@@ -1,5 +1,6 @@
-from tools import *
 import uuid
+
+from tools import *
 
 
 class State:
@@ -7,31 +8,44 @@ class State:
     State: a class that contains the model of the environment
     """
 
-    def __init__(self, ego=None, others=None):
+    def __init__(self, ego=None, others=None, agents=None):
         self.vehicles = [ego]
+        self.agents = {}
         if others:
+            if not agents or len(agents) != others:
+                raise (Exception("must give an agent to a non-autonomous vehicle"))
+            for i in range(len(others)):
+                self.agents[others[i].id] = agents[i]
             self.vehicles.extend(others)
 
     def reset(self):
+        if self.agents:
+            self.agents.clear()
         self.vehicles.clear()
         self.vehicles.append(None)
 
-    def step(self, action, dt):
+    def step(self, actions, dt):
+        if len(actions) != len(self.vehicles):
+            raise Exception("not all vehicles have an action")
         # moving forward
-        self.vehicles[0].step(action, dt)
+        for i in range(0, len(self.vehicles)):
+            self.vehicles[i].step(actions[i], dt=dt)
         for other in self.vehicles[1:]:
-            other.step(dt=dt)
             if not other.exist:
                 self.vehicles.remove(other)
+                del self.agents[other.id]
 
     def set_ego(self, ego):
         self.vehicles[0] = ego
 
-    def add_others(self, other):
+    def add_others(self, other, agent):
         self.vehicles.append(other)
+        self.agents[other.id] = agent
 
-    def get_vehicle_state(self):
-        return [vehicle.state for vehicle in self.vehicles]
+    def get_vehicle_by_id(self, v_id):
+        for vehicle in self.vehicles[1:]:
+            if vehicle.id == v_id:
+                return vehicle
 
 
 class VehicleState:
@@ -39,64 +53,96 @@ class VehicleState:
     VehicleState: state of one vehicle
     """
 
-    def __init__(self, x, y, theta, route, v):
+    def __init__(self, x, y, theta, v):
         self.x = x
         self.y = y
         self.theta = theta
-        self.route = route
-        self.v = min(v, route.seg1.max_speed)
+        self.v = v
 
-    def step(self, action):
-        """
-        move the vehicle with action along current route, will change current state
-        :param action: Action, acceleration to be taken
-        """
-        pass
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
 
 
 class Vehicle:
 
-    def __init__(self, state, image, agent=None, max_speed=3, max_acc=1, length=2, width=1):
-        """
-        a single vehicle's state and its attribute
-        :param state: VehicleState, contains x, y, theta, route, v
-        :param image: image of this vehicle
-        :param agent: planner of this vehicle
-        :param length: length of the vehicle
-        :param width: width of the vehicle
-        :param max_speed: max design speed of the vehicle
-        :param max_acc: max design acceleration of the vehicle
-        """
+    def __init__(self, route, v, image_name, max_speed=4, max_acc=1, min_acc=-5, length=2, width=1):
         self.id = uuid.uuid4()
-        self.state = state  # VehicleState
-        self.agent = agent
+        self.route = route
+        self.state = VehicleState(route.seg1.x, route.seg1.y, route.seg1.theta, min(v, route.seg1.max_speed, max_speed))
+        self.max_acc = max_acc
+        self.min_acc = min_acc
         self.max_speed = max_speed
-        self.max_acc = max_acc  # m/s^2 max acceleration
-        self.length = length  # shape: length of a vehicle
-        self.width = width  # shape: width of a vehicle
-        self.collide_range = math.sqrt(2) * self.length / 2  # collide detection range
-        self._image = loadImage(image)
+        self.length = length
+        self.width = width
+        self.radius = length  # math.sqrt((length / 2) ** 2 + (width / 2) ** 2)  # for collide detection
+        self.action = 0
+        # image and rect setting
+        self._image = load_image(image_name, width=width, height=length)
         self.rect = None
         self.exist = True  # whether exists
-        self._move_image()
 
     def collide(self, others):
-        return self.rect.collidelist([other.rect for other in others]) != -1
+        for other in others:
+            if collide_detection(self.state.x, self.state.y, other.state.x, other.state.y, self.radius, other.radius):
+                return True
+        return False
 
-    #
-    # def get_distance(self, other):
-    #     return math.sqrt((self.state.x - other.state.x) ** 2 + (self.state.y - other.state.y) ** 2) \
-    #            - self.collide_range - other.collide_range
-
-    def step(self, action=None, dt=1):
-        if self.agent:
-            action = self.agent.get_action(self.state)
-        distance = self.state.v * dt + action * dt * dt / 2
-        self.state.x, self.state.y, self.state.theta = self.state.route.next(self.state.x, self.state.y,
-                                                                             self.state.theta, distance)
-        self.state.v = self.state.v + action * dt
-        if not self.state.x:
+    def step(self, action, dt=1):
+        """
+        actual moving
+        :param action: action to be taken
+        :param dt: time that the action last
+        """
+        # check acc limit
+        if action > self.max_acc:
+            action = self.max_acc
+        elif action < self.min_acc:
+            action = self.min_acc
+        # check speed limit
+        v = self.state.v
+        max_v = self.get_max_speed()
+        if v + action * dt > max_v:
+            acc_t = (max_v - v) / action
+            acc_distance = (max_v + v) * acc_t / 2
+            distance = acc_distance + max_v * (dt - acc_t)
+            self.state = self.forward(distance=distance)
+            if self.state:
+                self.state.v = max_v
+        elif v + action * dt < 0:
+            mod_t = v / action
+            distance = v * mod_t / 2
+            self.state = self.forward(distance=distance)
+            if self.state:
+                self.state.v = 0
+        else:
+            self.state = self.forward(action, dt)
+        if not self.state:
             self.exist = False
+
+    def forward(self, action=None, dt=None, distance=None):
+        """
+        simulate to move
+        :param action:
+        :param dt:
+        :param distance:
+        :return: new state or None if out of map
+        """
+        if distance is None:
+            if action is None or dt is None:
+                raise Exception("must set distance or (action and dt)")
+            distance = self.state.v * dt + action * dt * dt / 2
+        x, y, theta = self.route.next(self.state.x, self.state.y, self.state.theta, distance)
+        if x is None:
+            return None
+        v = self.state.v + action * dt if action else self.state.v
+
+        return VehicleState(x, y, theta, v)
+
+    def get_max_speed(self):
+        return min(self.max_speed, self.route.get_max_speed(self.state.x, self.state.y))
+
+    def get_observation(self):
+        return SingleOb(self.state, self.route, self.radius, self.action, self.max_acc, self.get_max_speed())
 
     def __eq__(self, other):
         return self.id == other.id
@@ -104,16 +150,13 @@ class Vehicle:
     def __ne__(self, other):
         return self.id != other.id
 
-    def _move_image(self):
-        image = pg.transform.rotate(self._image, self.state.theta / math.pi * 180)
-        x, y = cartesian2py(self.state.x, self.state.y)
-        self.rect = image.get_rect()
-        self.rect = self.rect.move(x - self.rect.center[0], y - self.rect.center[1])
-        return image
-
     def render(self, surface):
         if self.exist:
-            surface.blit(self._move_image(), self.rect)
+            image = pg.transform.rotate(self._image, self.state.theta / math.pi * 180)
+            x, y = cartesian2py(self.state.x, self.state.y)
+            rect = image.get_rect()
+            rect = rect.move(x - rect.center[0], y - rect.center[1])
+            surface.blit(image, rect)
 
 
 class Action:
@@ -125,10 +168,23 @@ class Action:
         pass
 
 
+class SingleOb:
+
+    def __init__(self, state, route, radius, a, max_acc, max_speed):
+        self.state = state
+        self.route = route
+        self.radius = radius
+        self.a = a
+        self.max_acc = max_acc
+        self.max_speed = max_speed
+
+
 class Observation:
     """
     Observation: observation of the current state, used to infer belief state
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, ego, others, road_map):
+        self.ego = ego
+        self.others = others
+        self.road_map = road_map
