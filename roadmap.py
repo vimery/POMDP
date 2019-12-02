@@ -106,11 +106,13 @@ class Connection:
         if seg1.theta == seg2.theta:
             # radius, if r == 0, it's a line
             self.r = 0
+            self.length = seg1.width * 2
         elif (seg1.theta < seg2.theta and (seg1.theta != nh_pi or seg2.theta != pi)) or (
                 seg1.theta == pi and seg2.theta == nh_pi):
             # left turn, r is 1.5 width
             self.left_turn = 1
             self.r = seg1.width * 1.5
+            self.length = h_pi * self.r
             # center of circle
             if (seg1.y_end < seg2.y) ^ (seg1.x_end < seg2.x):
                 # 1st and 3rd quadrant
@@ -123,6 +125,7 @@ class Connection:
             # right turn, r is 0.5 width
             self.left_turn = -1
             self.r = seg1.width / 2
+            self.length = h_pi * self.r
             # center of circle
             if (seg1.y_end < seg2.y) ^ (seg1.x_end < seg2.x):
                 # 1st and 3rd quadrant
@@ -192,6 +195,16 @@ class Connection:
         # do not render connection
         pass
 
+    def get_collide_area(self, other_conn):
+        cur = self.get_occupancy()
+        other = other_conn.get_occupancy()
+        collide = []
+        for c_ele in cur:
+            for o_ele in other:
+                if c_ele == o_ele and c_ele not in collide:
+                    collide.append(c_ele)
+        return collide
+
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y and self.r == other.r
 
@@ -213,6 +226,7 @@ class Route:
             self.priority = 1
         else:
             self.priority = 2
+        self.length = seg1.len + conn.length + seg2.len
 
     def next(self, x, y, theta, distance):
         if self.seg2.contains(x, y):
@@ -251,6 +265,9 @@ class Route:
         occupancy.insert(0, self.seg1.id)
         occupancy.insert(0, self.seg2.id)
         return occupancy
+
+    def get_collide(self, other_route):
+        pass
 
     def __eq__(self, other):
         return self.conn == other.conn
