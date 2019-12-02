@@ -20,12 +20,12 @@ class TTC(Agent):
 
     def __init__(self):
         super().__init__()
-        self.pre = 8
+        self.pre = 4
         self.ego = None
 
     def collide_predict(self, observation):
         ego = observation.ego
-        for i in np.arange(1, self.pre):
+        for i in np.arange(0, self.pre, 0.1):
             ego_state = forward(ego.state, ego.route, i, ego.get_max_speed(), 0)
             if not ego_state[0]:
                 continue

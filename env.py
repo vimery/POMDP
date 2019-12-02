@@ -9,7 +9,7 @@ from roadmap import *
 import random
 
 # max step number
-max_steps = 1000
+max_steps = 300
 
 
 def _gen_segments(params):
@@ -156,7 +156,7 @@ class Env:
         return vehicle
 
     def _gen_vehicle_fix(self):
-        return Vehicle(self.road_map.routes[5], 2, "ego.png")
+        return Vehicle(self.road_map.routes[5], 4, "ego.png", max_speed=6)
 
     def render(self):
         """

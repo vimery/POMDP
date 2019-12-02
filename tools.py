@@ -86,4 +86,4 @@ class InterParam:
     num_lanes = 2
     scale = 10
 
-    max_speed = 4.0  # m/s
+    max_speed = 8.0  # m/s

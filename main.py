@@ -30,19 +30,24 @@ if __name__ == '__main__':
 
         if done:
             print(done)
-            pg.quit()
-            break
+            state = env.reset()
+            # pg.quit()
+            continue
+            # break
         step_array.append(env.step_count)
         speed_array[0].append(state.ego.state.v)
         for i in range(1, len(state.others) + 1):
             if i >= len(speed_array):
                 speed_array.append([])
-            speed_array[i].append(state.others[i-1].state.v)
+            speed_array[i].append(state.others[i - 1].state.v)
 
         print("current step is: {}".format(step))
         print("current position of vehicles are: ")
-        print("x: {}, y: {}, action: {}".format(state.ego.state.x, state.ego.state.y, state.ego.action))
+        print("x: {}, y: {}, v: {}, action: {}".format(state.ego.state.x, state.ego.state.y, state.ego.state.v,
+                                                       state.ego.action))
         for observation in state.others:
-            print("x: {}, y: {}, action: {}".format(observation.state.x, observation.state.y, observation.a))
+            print(
+                "x: {}, y: {}, v: {}, action: {}".format(observation.state.x, observation.state.y, observation.state.v,
+                                                         observation.a))
 
     draw_st_fig(step_array, speed_array)

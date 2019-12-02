@@ -65,7 +65,7 @@ class VehicleState:
 
 class Vehicle:
 
-    def __init__(self, route, v, image_name, max_speed=4, max_acc=1, min_acc=-5, length=2, width=1):
+    def __init__(self, route, v, image_name, max_speed=10, max_acc=1, min_acc=-5, length=2, width=1):
         self.id = uuid.uuid4()
         self.route = route
         self.state = VehicleState(route.seg1.x, route.seg1.y, route.seg1.theta, min(v, route.seg1.max_speed, max_speed))
@@ -98,6 +98,7 @@ class Vehicle:
             action = self.max_acc
         elif action < self.min_acc:
             action = self.min_acc
+        self.action = action
         # check speed limit
         v = self.state.v
         max_v = self.get_max_speed()
