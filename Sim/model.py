@@ -1,6 +1,6 @@
 import uuid
 
-from tools import *
+from Sim.tools import *
 
 
 class State:
@@ -74,7 +74,7 @@ class Vehicle:
         self.max_speed = max_speed
         self.length = length
         self.width = width
-        self.radius = length  # math.sqrt((length / 2) ** 2 + (width / 2) ** 2)  # for collide detection
+        self.radius = math.sqrt((length / 2) ** 2 + (width / 2) ** 2)  # for collide detection
         self.action = 0
         # image and rect setting
         self._image = load_image(image_name, width=width, height=length)
@@ -189,3 +189,13 @@ class Observation:
         self.ego = ego
         self.others = others
         self.road_map = road_map
+
+    def get_array(self):
+        e = self.ego.state
+        ob = [e.x, e.y, e.theta, e.v]
+        for v in self.others:
+            s = v.state
+            ob.extend([s.x, s.y, s.theta, s.v])
+        for i in range(12 - len(ob)):
+            ob.append(0)
+        return ob

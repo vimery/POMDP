@@ -4,8 +4,8 @@
 # -- imports -------------------------------------------------------------------
 # ==============================================================================
 from agent import *
-from model import *
-from roadmap import *
+from Sim.model import *
+from Sim.roadmap import *
 import random
 
 # max step number
@@ -100,23 +100,32 @@ def _gen_full_inter(params):
     return RoadMap(routes)
 
 
-class Env:
+class Env(object):
+    r"""The main Sim class.
+
+        The main API methods that users of this class need to know are:
+
+            step
+            reset
+            render
+            close
+
+    """
 
     def __init__(self, params):
-        self.road_map = _gen_full_inter(params)  # get map
+        self.road_map = None  # get map
         self.state = State()
         self.action_space = []
         self.dt = 0.1  # s, interval
         self.step_count = 0
+        self.need_render = False
 
-        # pygame
-        pg.init()
-        size_x = (params.x_max - params.x_min) * params.scale
-        size_y = (params.y_max - params.y_min) * params.scale
-        self.win = pg.display.set_mode((size_x, size_y))
-        pg.display.set_caption("Autonomous driving simulator")
-        self.background = self.win.fill(Color.white, (0, 0, size_x, size_y))
-        self.font = pg.font.SysFont("arial", 16)
+        # for render
+        self.size_x = (params.x_max - params.x_min) * params.scale
+        self.size_y = (params.y_max - params.y_min) * params.scale
+        self.win = None
+        self.background = None
+        self.font = None
 
         self.reset()
 
@@ -133,9 +142,6 @@ class Env:
         for i in range(2):
             self._add_random_vehicle()
         self.action_space = [-1, 0, 1]
-
-        # === pygame ===
-        self.render()
 
         return self.get_observation(self.state.vehicles[0])
 
@@ -162,6 +168,13 @@ class Env:
         """
         show graphic image of simulator
         """
+        if not self.need_render:
+            self.need_render = True
+            pg.init()
+            self.win = pg.display.set_mode((self.size_x, self.size_y))
+            pg.display.set_caption("Autonomous driving simulator")
+            self.background = self.win.fill(Color.white, (0, 0, self.size_x, self.size_y))
+            self.font = pg.font.SysFont("arial", 16)
         # erase window
         self.background = self.win.fill(Color.white, self.background)
         # draw road_map
@@ -224,13 +237,10 @@ class Env:
         :param action: action needs to be taken
         :return:
         Observation: new observation after taking an action
-        reward,
-        done: the simulation is finished,
+        reward: R(s,a)
+        done: the simulation is finished
         info: debug message
         """
-        # add random vehicle with rate
-        if random.random() < 0:
-            self._add_random_vehicle()
         # get the action for other vehicles
         actions = self.get_others_actions()
         actions.insert(0, action)
@@ -244,31 +254,18 @@ class Env:
     def __del__(self):
         pass
 
+    def close(self):
+        if self.need_render:
+            pg.quit()
 
-class InfiniteEnv(Env):
 
-    def __init__(self, params):
-        super().__init__(params)
-
-    def step(self, action=None):
-        if random.random() < 0.05:
-            self._add_random_vehicle()
-        # get the action for other vehicles
-        actions = self.get_others_actions()
-        self.state.step(actions, self.dt)
-        self.step_count += 1
-
-        observation = self.get_observation(self.state.vehicles[0])
-
-        return observation, self.done(), self.step_count
-
-    def done(self):
-        ego = self.state.vehicles[0]
-        if not ego.exist:
-            self.state.vehicles.remove(ego)
-        if not self.state:
-            return 1
-        elif max_steps < self.step_count:
-            return 2
-        else:
-            return 0
+def make(name):
+    if name == "t":
+        env = Env(InterParam)
+        env.road_map = _gen_t_inter(InterParam)
+    elif name == "full":
+        env = Env(InterParam)
+        env.road_map = _gen_full_inter(InterParam)
+    else:
+        raise Exception("no such environment")
+    return env

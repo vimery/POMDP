@@ -1,6 +1,5 @@
-from env import *
-from tools import InterParam
-from agent import TTC
+import Sim
+from agent import *
 import matplotlib.pyplot as plt
 
 
@@ -15,10 +14,9 @@ def draw_st_fig(st, sp):
 
 
 if __name__ == '__main__':
-    params = InterParam()
-    env = Env(params)
-    state = env.reset()
-    agent = TTC()
+    env = Sim.make("full")
+    observation = env.reset()
+    agent = DQNAgent()
 
     speed_array = [[]]
     step_array = []
@@ -31,13 +29,13 @@ if __name__ == '__main__':
     time_out_times = 0
 
     while cur_run_times < max_run_times:
-        action = agent.get_action(state)
-        state, done, step = env.step(action)
-        env.render()
+        action = agent.get_action(observation.get_array())
+        observation, done, step = env.step(action)
+        # env.render()
 
         if done:
             cur_run_times += 1
-            state = env.reset()
+            observation = env.reset()
             if done == -1:
                 collision_times += 1
             elif done == 1:
@@ -50,8 +48,8 @@ if __name__ == '__main__':
             continue
             # break
         # step_array.append(step)
-        # speed_array[0].append(state.ego.state.v)
-        # for i in range(1, len(state.others) + 1):
+        # speed_array[0].append(observation.ego.state.v)
+        # for i in range(1, len(observation.others) + 1):
         #     if i >= len(speed_array):
         #         speed_array.append([])
         #     speed_array[i].append(state.others[i - 1].state.v)
@@ -69,3 +67,4 @@ if __name__ == '__main__':
     print("success rate: {}%".format(success_times * 100 / max_run_times))
     print("time out rate: {}%".format(time_out_times * 100 / max_run_times))
     print("average pass steps: {}".format(np.average(step_array)))
+    pg.quit()

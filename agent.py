@@ -1,4 +1,7 @@
-from tools import *
+from Sim.tools import *
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Agent:
@@ -67,3 +70,26 @@ class Constant(Agent):
 
     def get_action(self, state):
         return self.acc
+
+
+class DQNAgent(Agent):
+
+    def __init__(self):
+        super().__init__()
+        self.device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+
+    def get_action(self, state):
+        return 0
+
+
+class DQN(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(12, 6)
+        self.fc2 = nn.Linear(6, 3)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
