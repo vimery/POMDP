@@ -65,7 +65,7 @@ class VehicleState:
 
 class Vehicle:
 
-    def __init__(self, route, v, image_name, max_speed=10, max_acc=1, min_acc=-5, length=2, width=1):
+    def __init__(self, route, v, image_name=None, max_speed=10, max_acc=1, min_acc=-5, length=2, width=1):
         self.id = uuid.uuid4()
         self.route = route
         self.state = VehicleState(route.seg1.x, route.seg1.y, route.seg1.theta, min(v, route.seg1.max_speed, max_speed))
@@ -76,10 +76,12 @@ class Vehicle:
         self.width = width
         self.radius = math.sqrt((length / 2) ** 2 + (width / 2) ** 2)  # for collide detection
         self.action = 0
-        # image and rect setting
-        self._image = load_image(image_name, width=width, height=length)
-        self.rect = None
         self.exist = True  # whether exists
+
+        # image and rect setting
+        self._need_render = False
+        self._image_name = image_name
+        self._image = None
 
     def collide(self, others):
         for other in others:
@@ -152,6 +154,9 @@ class Vehicle:
         return self.id != other.id
 
     def render(self, surface):
+        if not self._need_render:
+            self._need_render = True
+            self._image = load_image(self._image_name, width=self.width, height=self.length)
         if self.exist:
             image = pg.transform.rotate(self._image, self.state.theta / math.pi * 180)
             x, y = cartesian2py(self.state.x, self.state.y)

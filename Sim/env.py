@@ -113,11 +113,12 @@ class Env(object):
     """
 
     def __init__(self, params):
-        self.road_map = None  # get map
+        self.road_map = None
+        self.vehicles = []
         self.state = State()
         self.action_space = []
         self.dt = 0.1  # s, interval
-        self.step_count = 0
+        self.steps = 0
         self.need_render = False
 
         # for render
@@ -134,14 +135,21 @@ class Env(object):
         reset the environment
         :return: observation after reset
         """
-        # === state ===
-        self.state.reset()  # clean
-        self.step_count = 0
-        self.state.set_ego(self._gen_vehicle_fix())
-        # add random other vehicles
-        for i in range(2):
-            self._add_random_vehicle()
-        self.action_space = [-1, 0, 1]
+        # clear
+        self.vehicles.clear()
+        self.steps = 0
+
+        # set initial env
+        self.vehicles.append(
+            Vehicle(self.road_map.routes[5], v=4, image_name="ego.png", max_speed=5, max_acc=1, min_acc=-5)
+        )
+        self.vehicles.append(
+            Vehicle(self.road_map.routes[10], v=3, image_name="other.png", max_speed=4, max_acc=1, min_acc=-5)
+        )
+        self.vehicles.append(
+            Vehicle(self.road_map.routes[2], v=5, image_name="other.png", max_speed=6, max_acc=2, min_acc=-5)
+        )
+        self.action_space = [-2, 0,  2]
 
         return self.get_observation(self.state.vehicles[0])
 
@@ -160,9 +168,6 @@ class Env(object):
             count = count + 1
         # add to state
         return vehicle
-
-    def _gen_vehicle_fix(self):
-        return Vehicle(self.road_map.routes[5], 4, "ego.png", max_speed=6)
 
     def render(self):
         """
@@ -227,7 +232,7 @@ class Env(object):
                 done = 0  # normal
         else:
             done = 1  # out of map
-        if not done and self.step_count > max_steps:
+        if not done and self.steps > max_steps:
             done = -2  # overtime
         return done
 
@@ -245,11 +250,11 @@ class Env(object):
         actions = self.get_others_actions()
         actions.insert(0, action)
         self.state.step(actions, self.dt)
-        self.step_count += 1
+        self.steps += 1
 
         observation = self.get_observation(self.state.vehicles[0])
 
-        return observation, self.done(), self.step_count
+        return observation, self.done(), self.steps
 
     def __del__(self):
         pass
