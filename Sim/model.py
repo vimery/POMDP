@@ -101,13 +101,15 @@ class Vehicle:
             acc_t = (max_v - v) / action
             acc_distance = (max_v + v) * acc_t / 2
             distance = acc_distance + max_v * (dt - acc_t)
+            self.v = max_v
         elif v + action * dt < 0:
             mod_t = v / action
             distance = v * mod_t / 2
+            self.v = 0
         else:
             distance = self.v * dt + action * dt * dt / 2
+            self.v = self.v + action * dt
         self.x, self.y, self.theta = self.route.next(self.x, self.y, self.theta, distance)
-        self.v = self.v + action * dt
         if not self.x:
             self.exist = False
 
@@ -157,7 +159,7 @@ class Observation:
     def get_array(self):
         ob = [[self.ego.x, self.ego.y, self.ego.theta, self.ego.v]]
         for i in range(self.count):
-            if i in self.vehicles:
+            if i in self.vehicles and self.vehicles[i].exist:
                 if i != self.id:
                     vehicle = self.vehicles[i]
                     ob.append([vehicle.x, vehicle.y, vehicle.theta, vehicle.v])

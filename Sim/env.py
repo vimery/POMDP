@@ -117,7 +117,7 @@ class Env(object):
         self.vehicles = {}
         self.vehicles_count = 0
         self.state = State()
-        self.action_space = []
+        self.action_space = range(-5, 3, 1)
         self.dt = 0.1  # s, interval
         self.steps = 0
         self.need_render = False
@@ -152,7 +152,6 @@ class Env(object):
                                                      agent=TTC(), image_name="other.png", max_speed=6, max_acc=2,
                                                      min_acc=-5)
         self.vehicles_count += 1
-        self.action_space = [-2, 0, 2]
 
         return self._get_observation(0)
 
@@ -166,10 +165,10 @@ class Env(object):
         done: the simulation is finished
         info: debug message
         """
-        self._transition(action)
+        self._transition(self.action_space[action])
         self.steps += 1
-        observation = self._get_observation(0)
         done = self._is_done()
+        observation = self._get_observation(0) if done == 0 else None
         reward = self._get_reward(done)
 
         return observation, reward, done, self.steps
