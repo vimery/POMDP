@@ -21,7 +21,7 @@ if __name__ == '__main__':
     speed_array = [[]]
     step_array = []
 
-    max_run_times = 10
+    max_run_times = 1
     cur_run_times = 0
 
     collision_times = 0
@@ -30,8 +30,8 @@ if __name__ == '__main__':
 
     while cur_run_times < max_run_times:
         action = agent.get_action(observation.get_array())
-        observation, done, step = env.step(action)
-        # env.render()
+        observation, reward, done, step = env.step(action)
+        env.render()
 
         if done:
             cur_run_times += 1
@@ -48,7 +48,7 @@ if __name__ == '__main__':
             continue
             # break
         # step_array.append(step)
-        # speed_array[0].append(observation.ego.state.v)
+        # speed_array[0].append(observation.ego.v)
         # for i in range(1, len(observation.others) + 1):
         #     if i >= len(speed_array):
         #         speed_array.append([])
@@ -56,15 +56,15 @@ if __name__ == '__main__':
 
         # print("current step is: {}".format(step))
         # print("current position of vehicles are: ")
-        # print("x: {}, y: {}, v: {}, action: {}".format(state.ego.state.x, state.ego.state.y, state.ego.state.v,
+        # print("x: {}, y: {}, v: {}, action: {}".format(state.ego.x, state.ego.y, state.ego.v,
         #                                                state.ego.action))
         # for observation in state.others:
         #     print(
-        #         "x: {}, y: {}, v: {}, action: {}".format(observation.state.x, observation.state.y, observation.state.v,
+        #         "x: {}, y: {}, v: {}, action: {}".format(observation.x, observation.y, observation.v,
         #                                                  observation.a))
 
     print("collide rate: {}%".format(collision_times * 100 / max_run_times))
     print("success rate: {}%".format(success_times * 100 / max_run_times))
     print("time out rate: {}%".format(time_out_times * 100 / max_run_times))
     print("average pass steps: {}".format(np.average(step_array)))
-    pg.quit()
+    env.close()

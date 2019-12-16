@@ -114,7 +114,8 @@ class Env(object):
 
     def __init__(self, params):
         self.road_map = None
-        self.vehicles = []
+        self.vehicles = {}
+        self.vehicles_count = 0
         self.state = State()
         self.action_space = []
         self.dt = 0.1  # s, interval
@@ -128,8 +129,6 @@ class Env(object):
         self.background = None
         self.font = None
 
-        self.reset()
-
     def reset(self):
         """
         reset the environment
@@ -138,103 +137,24 @@ class Env(object):
         # clear
         self.vehicles.clear()
         self.steps = 0
+        self.vehicles_count = 0
 
         # set initial env
-        self.vehicles.append(
-            Vehicle(self.road_map.routes[5], v=4, image_name="ego.png", max_speed=5, max_acc=1, min_acc=-5)
-        )
-        self.vehicles.append(
-            Vehicle(self.road_map.routes[10], v=3, image_name="other.png", max_speed=4, max_acc=1, min_acc=-5)
-        )
-        self.vehicles.append(
-            Vehicle(self.road_map.routes[2], v=5, image_name="other.png", max_speed=6, max_acc=2, min_acc=-5)
-        )
-        self.action_space = [-2, 0,  2]
+        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[5], v=4, v_id=self.vehicles_count,
+                                                     image_name="ego.png", max_speed=5, max_acc=1, min_acc=-5)
+        self.vehicles_count += 1
 
-        return self.get_observation(self.state.vehicles[0])
+        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[10], v=3, v_id=self.vehicles_count,
+                                                     agent=TTC(), image_name="other.png", max_speed=4, max_acc=1,
+                                                     min_acc=-5)
+        self.vehicles_count += 1
+        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[2], v=5, v_id=self.vehicles_count,
+                                                     agent=TTC(), image_name="other.png", max_speed=6, max_acc=2,
+                                                     min_acc=-5)
+        self.vehicles_count += 1
+        self.action_space = [-2, 0, 2]
 
-    def _get_random_vehicle(self):
-        # generate a vehicle
-        vehicle = None
-        count = 0
-        # try up to 5 times
-        while not vehicle and count < 5:
-            route = random.choice(self.road_map.routes)
-            # route = self.road_map.routes[8]
-            v = random.randrange(2, route.seg1.max_speed)
-            vehicle = Vehicle(route, v, "other.png")
-            if vehicle.collide(self.state.vehicles):
-                vehicle = None
-            count = count + 1
-        # add to state
-        return vehicle
-
-    def render(self):
-        """
-        show graphic image of simulator
-        """
-        if not self.need_render:
-            self.need_render = True
-            pg.init()
-            self.win = pg.display.set_mode((self.size_x, self.size_y))
-            pg.display.set_caption("Autonomous driving simulator")
-            self.background = self.win.fill(Color.white, (0, 0, self.size_x, self.size_y))
-            self.font = pg.font.SysFont("arial", 16)
-        # erase window
-        self.background = self.win.fill(Color.white, self.background)
-        # draw road_map
-        self.road_map.render(self.win)
-        # draw vehicles
-        for vehicle in self.state.vehicles:
-            vehicle.render(self.win)
-        # quit event
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                exit(0)
-        pg.display.update()
-        pg.time.wait(17)
-
-    def get_observation(self, vehicle=None, v_id=None):
-        """
-        get Observation from current state based on a vehicle
-        :param vehicle:
-        :param v_id:
-        :return:
-        """
-        other_vehicles = self.state.vehicles.copy()
-        if not vehicle:
-            if not v_id:
-                raise Exception("must give a vehicle or a vehicle id")
-            vehicle = self.state.get_vehicle_by_id(v_id)
-        other_vehicles.remove(vehicle)
-        others = [other.get_observation() for other in other_vehicles]
-        return Observation(vehicle, others, self.road_map)
-
-    def get_others_actions(self):
-        actions = []
-        for v_id, agent in self.state.agents.items():
-            actions.append(agent.get_action(self.get_observation(v_id=v_id)))
-        return actions
-
-    def _add_random_vehicle(self):
-        other = self._get_random_vehicle()
-        if other:
-            self.state.add_others(other, TTC())
-
-    def done(self):
-        ego = self.state.vehicles[0]
-        others = self.state.vehicles[1:]
-        if ego.exist:
-            if others and ego.collide(others):
-                done = -1  # collide
-            else:
-                done = 0  # normal
-        else:
-            done = 1  # out of map
-        if not done and self.steps > max_steps:
-            done = -2  # overtime
-        return done
+        return self._get_observation(0)
 
     def step(self, action):
         """
@@ -246,22 +166,108 @@ class Env(object):
         done: the simulation is finished
         info: debug message
         """
-        # get the action for other vehicles
-        actions = self.get_others_actions()
-        actions.insert(0, action)
-        self.state.step(actions, self.dt)
+        self._transition(action)
         self.steps += 1
+        observation = self._get_observation(0)
+        done = self._is_done()
+        reward = self._get_reward(done)
 
-        observation = self.get_observation(self.state.vehicles[0])
+        return observation, reward, done, self.steps
 
-        return observation, self.done(), self.steps
-
-    def __del__(self):
-        pass
+    def render(self):
+        """
+        show graphic image of simulator
+        """
+        if not self.need_render:
+            self.need_render = True
+            pg.init()
+            self.win = pg.display.set_mode((self.size_x, self.size_y))
+            pg.display.set_caption("Autonomous driving simulator")
+            self.background = (0, 0, self.size_x, self.size_y)
+            self.font = pg.font.SysFont("arial", 16)
+        self.background = self.win.fill(Color.white, self.background)
+        self.road_map.render(self.win)
+        for vehicle in self.vehicles.values():
+            vehicle.render(self.win)
+        # quit event
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                exit(0)
+        pg.display.update()
+        pg.time.wait(17)
 
     def close(self):
         if self.need_render:
             pg.quit()
+
+    def _get_random_vehicle(self):
+        # generate a vehicle
+        vehicle = None
+        count = 0
+        # try up to 5 times
+        while not vehicle and count < 5:
+            route = random.choice(self.road_map.routes)
+            # route = self.road_map.routes[8]
+            v = random.randrange(2, route.seg1.max_speed)
+            vehicle = Vehicle(route, v, v_id=self.vehicles_count, agent=TTC(), image_name="other.png")
+            if self._collide(vehicle.id):
+                vehicle = None
+            count = count + 1
+        # add to state
+        return vehicle
+
+    def _get_observation(self, v_id):
+        vehicles = {v_id: self.vehicles[v_id]}
+        for key, vehicle in self.vehicles.items():
+            if v_id != key and self._is_observable(v_id, key):
+                vehicles[key] = vehicle
+        return Observation(v_id, self.vehicles, self.vehicles_count)
+
+    def _is_observable(self, v_id, o_id):
+        if self.vehicles[o_id].exist:
+            return True
+        return False
+
+    def _add_random_vehicle(self):
+        other = self._get_random_vehicle()
+        if other:
+            self.vehicles[self.vehicles_count] = other
+            self.vehicles_count += 1
+
+    def _collide(self, v_id):
+        others = []
+        for o_id, vehicle in self.vehicles.items():
+            if o_id != v_id and vehicle.exist:
+                others.append(vehicle)
+        return self.vehicles[v_id].collide(others)
+
+    def _is_done(self):
+        if self.vehicles[0].exist:
+            done = -1 if self._collide(0) else 0
+        else:
+            done = 1  # out of map
+        if not done and self.steps > max_steps:
+            done = -2  # overtime
+        return done
+
+    def _transition(self, action):
+        self.vehicles[0].step(action, self.dt)
+        for v_id, vehicle in self.vehicles.items():
+            if v_id != 0 and vehicle.exist:
+                o = self._get_observation(v_id)
+                a = vehicle.agent.get_action(o)
+                vehicle.step(a, self.dt)
+
+    def _get_reward(self, done):
+        if done == 1:
+            return 20000
+        ego = self.vehicles[0]
+        ra = -100 * ego.action ** 2
+        rv = -400 * (ego.v - ego.get_max_speed()) ** 2
+        rc = -20000 if done == -1 else 0
+
+        return ra + rv + rc
 
 
 def make(name):
