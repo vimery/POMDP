@@ -54,25 +54,26 @@ class Constant(Agent):
 
 class DQNAgent(Agent):
 
-    def __init__(self):
+    def __init__(self, n_features, n_actions):
         super().__init__()
         self.device = torch.device("cpu")
-        self.policy_net = DQN().to(self.device)
-        self.target_net = DQN().to(self.device)
+        self.n_actions = n_actions
+        self.policy_net = DQN(n_features, n_actions).to(self.device)
+        self.target_net = DQN(n_features, n_actions).to(self.device)
         self.memory = ReplayMemory(10000)
-        self.optimizer = optim.RMSprop(self.policy_net.parameters())
-        self.batch_size = 20
+        self.optimizer = optim.Adam(self.policy_net.parameters())
+        self.batch_size = 200
         self.gamma = 0.999
         self.target_update = 10
 
-    def get_action(self, ob, step, n_actions):
+    def get_action(self, ob, step):
         sample = random.random()
         eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1 * step / EPS_DECAY)
         if sample > eps_threshold:
             with torch.no_grad():
                 return self.policy_net(ob).max(1)[1].view(1, 1)
         else:
-            return torch.tensor([[random.randrange(n_actions)]], device=self.device, dtype=torch.long)
+            return torch.tensor([[random.randrange(self.n_actions)]], device=self.device, dtype=torch.long)
 
     def learn(self):
         if len(self.memory) < self.batch_size:
@@ -108,14 +109,21 @@ class DQNAgent(Agent):
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
+        return loss
+
+    def save(self, path):
+        torch.save(self.policy_net.state_dict(), path)
+
+    def load(self, path):
+        self.policy_net.load_state_dict(torch.load(path))
 
 
 class DQN(nn.Module):
 
-    def __init__(self):
+    def __init__(self, n_features, n_actions):
         super().__init__()
-        self.fc1 = nn.Linear(12, 8)
-        self.fc2 = nn.Linear(8, 8)
+        self.fc1 = nn.Linear(n_features, 6)
+        self.fc2 = nn.Linear(6, n_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))

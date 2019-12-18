@@ -1,7 +1,10 @@
-import Sim
-from agent import *
 import matplotlib.pyplot as plt
-import numpy as np
+
+import Sim
+import os
+from agent import *
+
+MODEL_PATH = "data/DQN"
 
 
 def draw_st_fig(st, sp):
@@ -14,76 +17,85 @@ def draw_st_fig(st, sp):
     plt.show()
 
 
-if __name__ == '__main__':
+def plot_array(array, title, xlable, ylable):
+    plt.figure()
+    plt.clf()
+    plt.title(title)
+    plt.xlabel(xlable)
+    plt.ylabel(ylable)
+    plt.plot(array)
+    plt.show()
+
+
+def _get_ob(m_ob, ag):
+    if not m_ob:
+        return None
+    x = torch.tensor(m_ob, dtype=torch.float)
+    x = x.view((1, -1)).to(ag.device)
+    return x
+
+
+def learn():
     env = Sim.make("full")
     ob = env.reset()
-    agent = DQNAgent()
+    agent = DQNAgent(sum([len(l) for l in ob]), len(env.action_space))
+    if os.path.exists(MODEL_PATH):
+        agent.load(MODEL_PATH)
 
-    speed_array = [[]]
     step_array = []
+    reward_array = []
 
-    num_episodes = 10
-    cur_run_times = 0
-
-    collision_times = 0
-    success_times = 0
-    time_out_times = 0
+    num_episodes = 100
 
     step = 0
 
-    def _get_ob(m_ob):
-        if not m_ob:
-            return None
-        x = torch.tensor(m_ob.get_array(), dtype=torch.float)
-        x = x.view((1, -1)).to(agent.device)
-        return x
-
     for i in range(num_episodes):
+        cumulative_reward = 0
         while True:
-            action = agent.get_action(_get_ob(ob), step, len(env.action_space))
+            action = agent.get_action(_get_ob(ob, agent), step)
             new_ob, reward, done, step = env.step(action.item())
+            cumulative_reward += reward
             reward = torch.tensor([reward], device=agent.device, dtype=torch.long)
 
-            agent.memory.push(_get_ob(ob), action, _get_ob(new_ob), reward)
+            agent.memory.push(_get_ob(ob, agent), action, _get_ob(new_ob, agent), reward)
             ob = new_ob
 
             agent.learn()
-            env.render()
+            # env.render()
 
             if done:
-                cur_run_times += 1
                 ob = env.reset()
-                if done == -1:
-                    collision_times += 1
-                elif done == 1:
-                    success_times += 1
-                else:
-                    time_out_times += 1
                 step_array.append(step)
-                # pg.quit()
-                # draw_st_fig(step_array, speed_array)
+                reward_array.append(cumulative_reward)
+                print(done, cumulative_reward)
                 break
         # Update the target network, copying all weights and biases in DQN
         if i % agent.target_update == 0:
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
-        # step_array.append(step)
-        # speed_array[0].append(observation.ego.v)
-        # for i in range(1, len(observation.others) + 1):
-        #     if i >= len(speed_array):
-        #         speed_array.append([])
-        #     speed_array[i].append(state.others[i - 1].state.v)
-
-        # print("current step is: {}".format(step))
-        # print("current position of vehicles are: ")
-        # print("x: {}, y: {}, v: {}, action: {}".format(state.ego.x, state.ego.y, state.ego.v,
-        #                                                state.ego.action))
-        # for observation in state.others:
-        #     print(
-        #         "x: {}, y: {}, v: {}, action: {}".format(observation.x, observation.y, observation.v,
-        #                                                  observation.a))
-
-    print("collide rate: {}%".format(collision_times * 100 / num_episodes))
-    print("success rate: {}%".format(success_times * 100 / num_episodes))
-    print("time out rate: {}%".format(time_out_times * 100 / num_episodes))
-    print("average pass steps: {}".format(np.average(step_array)))
+    plot_array(step_array, "steps in Training", "episodes", "steps")
+    plot_array(reward_array, "rewards in Training", "episodes", "reward")
+    agent.save(MODEL_PATH)
     env.close()
+
+
+def valid():
+    env = Sim.make("full")
+    ob = env.reset()
+    agent = DQNAgent(sum([len(l) for l in ob]), len(env.action_space))
+    agent.load(MODEL_PATH)
+
+    step = 0
+    cumulative_reward = 0
+    while True:
+        action = agent.get_action(_get_ob(ob, agent), step)
+        ob, reward, done, step = env.step(action.item())
+        cumulative_reward += reward
+
+        env.render()
+        if done:
+            break
+
+
+if __name__ == '__main__':
+    learn()
+    valid()

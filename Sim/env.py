@@ -9,7 +9,7 @@ from Sim.roadmap import *
 import random
 
 # max step number
-max_steps = 300
+max_steps = 500
 
 
 def _gen_segments(params):
@@ -115,8 +115,7 @@ class Env(object):
     def __init__(self, params):
         self.road_map = None
         self.vehicles = {}
-        self.vehicles_count = 0
-        self.state = State()
+        self.max_vehicles = 5
         self.action_space = range(-5, 3, 1)
         self.dt = 0.1  # s, interval
         self.steps = 0
@@ -137,21 +136,13 @@ class Env(object):
         # clear
         self.vehicles.clear()
         self.steps = 0
-        self.vehicles_count = 0
 
         # set initial env
-        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[5], v=4, v_id=self.vehicles_count,
-                                                     image_name="ego.png", max_speed=5, max_acc=1, min_acc=-5)
-        self.vehicles_count += 1
+        self.vehicles[0] = Vehicle(self.road_map.routes[5], v=4, v_id=0, image_name="ego.png",
+                                   max_speed=5, max_acc=1, min_acc=-5)
 
-        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[10], v=3, v_id=self.vehicles_count,
-                                                     agent=TTC(), image_name="other.png", max_speed=4, max_acc=1,
-                                                     min_acc=-5)
-        self.vehicles_count += 1
-        self.vehicles[self.vehicles_count] = Vehicle(self.road_map.routes[2], v=5, v_id=self.vehicles_count,
-                                                     agent=TTC(), image_name="other.png", max_speed=6, max_acc=2,
-                                                     min_acc=-5)
-        self.vehicles_count += 1
+        for i in range(1, self.max_vehicles):
+            self._add_random_vehicle(i)
 
         return self._get_observation(0)
 
@@ -200,50 +191,32 @@ class Env(object):
         if self.need_render:
             pg.quit()
 
-    def _get_random_vehicle(self):
-        # generate a vehicle
-        vehicle = None
-        count = 0
-        # try up to 5 times
-        while not vehicle and count < 5:
-            route = random.choice(self.road_map.routes)
-            # route = self.road_map.routes[8]
-            v = random.randrange(2, route.seg1.max_speed)
-            vehicle = Vehicle(route, v, v_id=self.vehicles_count, agent=TTC(), image_name="other.png")
-            if self._collide(vehicle.id):
-                vehicle = None
-            count = count + 1
-        # add to state
-        return vehicle
-
     def _get_observation(self, v_id):
         vehicles = {v_id: self.vehicles[v_id]}
         for key, vehicle in self.vehicles.items():
             if v_id != key and self._is_observable(v_id, key):
                 vehicles[key] = vehicle
-        return Observation(v_id, self.vehicles, self.vehicles_count)
+        return Observation(v_id, self.vehicles, self.max_vehicles).get_array()
 
     def _is_observable(self, v_id, o_id):
         if self.vehicles[o_id].exist:
             return True
         return False
 
-    def _add_random_vehicle(self):
-        other = self._get_random_vehicle()
-        if other:
-            self.vehicles[self.vehicles_count] = other
-            self.vehicles_count += 1
+    def _add_random_vehicle(self, i):
+        route = random.choice(self.road_map.routes)
+        v = random.randrange(2, route.seg1.max_speed)
+        other = Vehicle(route, v, v_id=i, agent=TTC(), image_name="other.png",
+                        max_acc=2, min_acc=-5, max_speed=4)
+        if not self._collide(other):
+            self.vehicles[i] = other
 
-    def _collide(self, v_id):
-        others = []
-        for o_id, vehicle in self.vehicles.items():
-            if o_id != v_id and vehicle.exist:
-                others.append(vehicle)
-        return self.vehicles[v_id].collide(others)
+    def _collide(self, vehicle):
+        return vehicle.collide([other for other in self.vehicles.values() if other.id != vehicle.id and other.exist])
 
     def _is_done(self):
         if self.vehicles[0].exist:
-            done = -1 if self._collide(0) else 0
+            done = -1 if self._collide(self.vehicles[0]) else 0
         else:
             done = 1  # out of map
         if not done and self.steps > max_steps:
@@ -259,14 +232,13 @@ class Env(object):
                 vehicle.step(a, self.dt)
 
     def _get_reward(self, done):
-        if done == 1:
-            return 20000
+        if done:
+            return 20000 if done == 1 else -20000
         ego = self.vehicles[0]
-        ra = -100 * ego.action ** 2
-        rv = -400 * (ego.v - ego.get_max_speed()) ** 2
-        rc = -20000 if done == -1 else 0
+        ra = -ego.action ** 2
+        rv = -4 * (ego.v - ego.get_max_speed()) ** 2
 
-        return ra + rv + rc
+        return ra + rv
 
 
 def make(name):
