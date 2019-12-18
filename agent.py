@@ -5,7 +5,9 @@ from collections import namedtuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from torch import optim
+from Sim.tools import collide_detection
 
 EPS_START = 0.9
 EPS_END = 0.05
@@ -29,17 +31,29 @@ class TTC(Agent):
     Time to collision, a model that describes how a driver will do with assumption of constant speed
     """
 
-    def __init__(self):
+    def __init__(self, n_actions):
         super().__init__()
-        self.pre = 4
-        self.ego = None
+        self.pre = 2
+        self.dt = 0.1
+        self.n_actions = n_actions
 
-    def collide_predict(self, observation):
-        ego = observation.ego
+    def collide_predict(self, ob):
+        ego = ob.ego
+        for dt in np.arange(0, self.pre, self.dt):
+            e_x, e_y, _, _, _ = ego.forward(ego.action, dt)
+            if not e_x:
+                return False
+            for v_id, vehicle in ob.vehicles.items():
+                if v_id != ego.id:
+                    o_x, o_y, _, _, _ = vehicle.forward(vehicle.action, dt)
+                    if o_x and collide_detection(e_x, e_y, o_x, o_y, ego.radius, vehicle.radius):
+                        return True
         return False
 
-    def get_action(self, observation):
-        return 0
+    def get_action(self, ob):
+        if self.collide_predict(ob):
+            return 0
+        return self.n_actions - 1
 
 
 class Constant(Agent):
@@ -56,7 +70,7 @@ class DQNAgent(Agent):
 
     def __init__(self, n_features, n_actions):
         super().__init__()
-        self.device = torch.device("cpu")
+        self.device = torch.device("cuda:0" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
         self.n_actions = n_actions
         self.policy_net = DQN(n_features, n_actions).to(self.device)
         self.target_net = DQN(n_features, n_actions).to(self.device)

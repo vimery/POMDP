@@ -22,7 +22,7 @@ class Vehicle:
         self.max_speed = max_speed
         self.length = length
         self.width = width
-        self.radius = math.sqrt((length / 2) ** 2 + (width / 2) ** 2)  # for collide detection
+        self.radius = math.sqrt(length ** 2 + width ** 2)  # actual height and width is 2 times in image
         self.agent = agent
         self.exist = True
 
@@ -43,12 +43,16 @@ class Vehicle:
         :param action: action to be taken
         :param dt: time that the action last
         """
+        self.x, self.y, self.theta, self.v, self.action = self.forward(action, dt)
+        if not self.x:
+            self.exist = False
+
+    def forward(self, action, dt):
         # check acc limit
         if action > self.max_acc:
             action = self.max_acc
         elif action < self.min_acc:
             action = self.min_acc
-        self.action = action
         # check speed limit
         v = self.v
         max_v = self.get_max_speed()
@@ -56,17 +60,16 @@ class Vehicle:
             acc_t = (max_v - v) / action
             acc_distance = (max_v + v) * acc_t / 2
             distance = acc_distance + max_v * (dt - acc_t)
-            self.v = max_v
+            v = max_v
         elif v + action * dt < 0:
             mod_t = v / action
             distance = v * mod_t / 2
-            self.v = 0
+            v = 0
         else:
             distance = self.v * dt + action * dt * dt / 2
-            self.v = self.v + action * dt
-        self.x, self.y, self.theta = self.route.next(self.x, self.y, self.theta, distance)
-        if not self.x:
-            self.exist = False
+            v = self.v + action * dt
+        x, y, theta = self.route.next(self.x, self.y, self.theta, distance)
+        return x, y, theta, v, action
 
     def get_max_speed(self):
         return min(self.max_speed, self.route.get_max_speed(self.x, self.y))

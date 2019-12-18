@@ -9,7 +9,7 @@ from Sim.roadmap import *
 import random
 
 # max step number
-max_steps = 500
+max_steps = 350
 
 
 def _gen_segments(params):
@@ -192,21 +192,19 @@ class Env(object):
             pg.quit()
 
     def _get_observation(self, v_id):
-        vehicles = {v_id: self.vehicles[v_id]}
+        vehicles = {}
         for key, vehicle in self.vehicles.items():
-            if v_id != key and self._is_observable(v_id, key):
+            if self._is_observable(v_id, key):
                 vehicles[key] = vehicle
-        return Observation(v_id, self.vehicles, self.max_vehicles).get_array()
+        return Observation(v_id, vehicles, self.max_vehicles)
 
     def _is_observable(self, v_id, o_id):
-        if self.vehicles[o_id].exist:
-            return True
-        return False
+        return self.vehicles[o_id].exist
 
     def _add_random_vehicle(self, i):
         route = random.choice(self.road_map.routes)
         v = random.randrange(2, route.seg1.max_speed)
-        other = Vehicle(route, v, v_id=i, agent=TTC(), image_name="other.png",
+        other = Vehicle(route, v, v_id=i, agent=TTC(len(self.action_space)), image_name="other.png",
                         max_acc=2, min_acc=-5, max_speed=4)
         if not self._collide(other):
             self.vehicles[i] = other
@@ -228,7 +226,7 @@ class Env(object):
         for v_id, vehicle in self.vehicles.items():
             if v_id != 0 and vehicle.exist:
                 o = self._get_observation(v_id)
-                a = vehicle.agent.get_action(o)
+                a = self.action_space[vehicle.agent.get_action(o)]
                 vehicle.step(a, self.dt)
 
     def _get_reward(self, done):

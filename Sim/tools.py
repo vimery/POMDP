@@ -23,6 +23,7 @@ def load_image(name, width, height, color_key=Color.white):
     except pg.error as message:
         print("Cannot load image", name)
         raise SystemExit(message)
+    # time 2 to let the image larger
     image = pg.transform.scale(image, (round(height * 2 * InterParam.scale), round(width * 2 * InterParam.scale)))
     image = image.convert_alpha()
     image.set_colorkey(color_key, RLEACCEL)
@@ -33,14 +34,13 @@ def collide_detection(x1, y1, x2, y2, r1, r2):
     return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2) <= r1 + r2
 
 
-def forward(state, route, dt, max_v, a):
-    v = state.v
+def forward(x, y, theta, v, route, dt, max_v, a):
     if v + a * dt > max_v:
         acc_t = (max_v - v) / a
         distance = (max_v + v) / 2 * acc_t + max_v * (dt - acc_t)
     else:
         distance = v * dt + a * dt * dt
-    return route.next(state.x, state.y, state.theta, distance)
+    return route.next(x, y, theta, distance)
 
 
 def draw_dashed_line(surf, color, start_pos, end_pos, width=1, dash_length=5):
