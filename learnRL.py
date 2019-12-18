@@ -5,6 +5,7 @@ import os
 from agent import *
 
 MODEL_PATH = "data/DQN"
+PIC_PATH = "result/"
 
 
 def draw_st_fig(st, sp):
@@ -24,7 +25,7 @@ def plot_array(array, title, xlabel, ylabel):
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.plot(array)
-    plt.show()
+    plt.savefig(PIC_PATH + title + ".png")
 
 
 def _get_ob(m_ob, ag):
@@ -45,7 +46,7 @@ def learn():
     step_array = []
     reward_array = []
 
-    num_episodes = 1000
+    num_episodes = 10000
 
     step = 0
 
@@ -75,7 +76,7 @@ def learn():
         # Update the target network, copying all weights and biases in DQN
         if i % agent.target_update == 0:
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
-            mean_reward = np.mean(reward_array[i - 20:i])
+            mean_reward = np.mean(reward_array[i - 20:i]) if i > 0 else float("-inf")
             if mean_reward > max_reward:
                 max_reward = mean_reward
                 agent.save(MODEL_PATH)
@@ -107,10 +108,12 @@ def valid():
 
             # env.render()
             if done:
+                ob = env.reset().get_array()
                 collide_times += done == -1
                 timeout_times += done == -2
                 reward_array.append(cumulative_reward)
                 step_array.append(step)
+                print(done, cumulative_reward)
                 break
     print("Total episodes in test: {}".format(num_episodes))
     print("collide rate: {}".format(collide_times / num_episodes))
@@ -122,5 +125,7 @@ def valid():
 
 
 if __name__ == '__main__':
+    print("===================== training begins ============================")
     learn()
+    print("===================== testing begins  ============================")
     valid()
