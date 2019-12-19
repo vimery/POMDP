@@ -8,7 +8,6 @@ def valid():
     env = Sim.make("full")
     ob = env.reset()
     agent = TTC(len(env.action_space))
-
     while True:
         action = agent.get_action(ob)
         ob, reward, done, step = env.step(action)

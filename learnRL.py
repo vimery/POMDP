@@ -48,12 +48,9 @@ def learn():
 
     num_episodes = 10000
 
-    step = 0
-
-    max_reward = float("-inf")
-
     for i in range(num_episodes):
         cumulative_reward = 0
+        step = 0
         while True:
             action = agent.get_action(_get_ob(ob, agent), step)
             new_ob, reward, done, step = env.step(action.item())
@@ -76,13 +73,10 @@ def learn():
         # Update the target network, copying all weights and biases in DQN
         if i % agent.target_update == 0:
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
-            mean_reward = np.mean(reward_array[i - 20:i]) if i > 0 else float("-inf")
-            if mean_reward > max_reward:
-                max_reward = mean_reward
-                agent.save(MODEL_PATH)
 
     plot_array(step_array, "steps in Training", "episodes", "steps")
     plot_array(reward_array, "rewards in Training", "episodes", "reward")
+    agent.save(MODEL_PATH)
     env.close()
 
 
@@ -97,11 +91,10 @@ def valid():
     timeout_times = 0
     reward_array = []
     step_array = []
-    step = 0
     for i in range(num_episodes):
         cumulative_reward = 0
         while True:
-            action = agent.get_action(_get_ob(ob, agent), step)
+            action = agent.get_action_without_exploration(_get_ob(ob, agent))
             ob, reward, done, step = env.step(action.item())
             ob = ob.get_array() if ob else None
             cumulative_reward += reward
@@ -120,7 +113,7 @@ def valid():
     print("timeout rate: {}".format(timeout_times / num_episodes))
     print("success rate: {}".format((num_episodes - collide_times - timeout_times) / num_episodes))
     plot_array(reward_array, "cumulative reward in test", "episodes", "reward")
-    plot_array(reward_array, "steps in test", "episodes", "reward")
+    plot_array(step_array, "steps in test", "episodes", "reward")
     env.close()
 
 

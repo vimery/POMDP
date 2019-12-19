@@ -31,6 +31,7 @@ class Segment:
         self.x_end = self.x + math.cos(self.theta) * self.len
         self.y_end = self.y + math.sin(self.theta) * self.len
         self.max_speed = max_speed
+        self.next_seg = None
 
         # rect
         self._x_min = min(self.x, self.x_end) - epsilon
@@ -99,6 +100,7 @@ class Connection:
         self.y_end = seg2.y
         # if this is a line, theta is the direction of this line
         self.theta = seg1.theta
+        self.next_seg = None
 
         # get radius, center and direction
         if seg1.theta == seg2.theta:
@@ -212,10 +214,13 @@ class Route:
     Route: a path that a car follows, contains two segments and a connection
     """
 
-    def __init__(self, seg1, conn, seg2):
+    def __init__(self, r_id, seg1, conn, seg2):
+        self.id = r_id
         self.seg1 = seg1
         self.conn = conn
         self.seg2 = seg2
+        self.seg1.next_seg = self.conn
+        self.conn.next_seg = self.seg2
         if conn.r == 0:
             # priority of moving direct is highest
             self.priority = 0
@@ -245,13 +250,13 @@ class Route:
         else:
             return self.next(sec.x_end, sec.y_end, sec2.theta, distance - sec.get_distance_to_end(x, y))
 
-    def get_max_speed(self, x, y):
-        if self.seg2.contains(x, y):
-            return self.seg2.max_speed
-        elif self.conn.contains(x, y):
-            return self.conn.max_speed
-        else:
-            return self.seg1.max_speed
+    # def get_max_speed(self, x, y):
+    #     if self.seg2.contains(x, y):
+    #         return self.seg2.max_speed
+    #     elif self.conn.contains(x, y):
+    #         return self.conn.max_speed
+    #     else:
+    #         return self.seg1.max_speed
 
     def render(self, surface):
         self.seg1.render(surface)
@@ -278,6 +283,9 @@ class RoadMap:
 
     def __init__(self, routes):
         self.routes = routes
+
+    def get_route(self, r_id):
+        return self.routes[r_id]
 
     def render(self, surface):
         for route in self.routes:

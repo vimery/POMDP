@@ -1,6 +1,7 @@
 import uuid
 
 from Sim.tools import *
+import torch
 
 
 class Vehicle:
@@ -14,6 +15,7 @@ class Vehicle:
         self.theta = route.seg1.theta
         self.v = min(v, route.seg1.max_speed, max_speed)
         self.route = route
+        self.cur_seg = route.seg1
         self.action = 0
 
         # vehicle property
@@ -44,8 +46,10 @@ class Vehicle:
         :param dt: time that the action last
         """
         self.x, self.y, self.theta, self.v, self.action = self.forward(action, dt)
-        if not self.x:
+        if self.x is None:
             self.exist = False
+        elif not self.cur_seg.contains(self.x, self.y):
+            self.cur_seg = self.cur_seg.next_seg
 
     def forward(self, action, dt):
         # check acc limit
@@ -62,7 +66,7 @@ class Vehicle:
             distance = acc_distance + max_v * (dt - acc_t)
             v = max_v
         elif v + action * dt < 0:
-            mod_t = v / action
+            mod_t = math.fabs(v / action)
             distance = v * mod_t / 2
             v = 0
         else:
@@ -72,7 +76,7 @@ class Vehicle:
         return x, y, theta, v, action
 
     def get_max_speed(self):
-        return min(self.max_speed, self.route.get_max_speed(self.x, self.y))
+        return min(self.max_speed, self.cur_seg.max_speed)
 
     def render(self, surface):
         if not self._need_render:
@@ -98,12 +102,15 @@ class Observation:
         self.count = count
 
     def get_array(self):
+        routes = [self.ego.route.id]
         ob = [[self.ego.x, self.ego.y, self.ego.theta, self.ego.v]]
         for i in range(self.count):
             if i in self.vehicles and self.vehicles[i].exist:
                 if i != self.id:
                     vehicle = self.vehicles[i]
                     ob.append([vehicle.x, vehicle.y, vehicle.theta, vehicle.v])
+                    routes.append(vehicle.route.id)
             else:
                 ob.append([0, 0, 0, 0])
+        # route_one_hot = torch.zeros()
         return ob

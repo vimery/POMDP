@@ -59,9 +59,9 @@ def _gen_t_inter(params):
     s = params.max_speed
     seg1, seg2, seg3, seg4, seg5, seg6, seg7, seg8 = _gen_segments(params)
 
-    routes = [Route(seg1, Connection(seg1, seg2, s), seg2), Route(seg1, Connection(seg1, seg5, s), seg5),
-              Route(seg3, Connection(seg3, seg5, s), seg5), Route(seg3, Connection(seg3, seg4, s), seg4),
-              Route(seg6, Connection(seg6, seg4, s), seg4), Route(seg6, Connection(seg6, seg2, s), seg2)]
+    routes = [Route(0, seg1, Connection(seg1, seg2, s), seg2), Route(1, seg1, Connection(seg1, seg5, s), seg5),
+              Route(2, seg3, Connection(seg3, seg5, s), seg5), Route(3, seg3, Connection(seg3, seg4, s), seg4),
+              Route(4, seg6, Connection(seg6, seg4, s), seg4), Route(5, seg6, Connection(seg6, seg2, s), seg2)]
 
     return RoadMap(routes)
 
@@ -90,12 +90,12 @@ def _gen_full_inter(params):
     s = params.max_speed
     seg1, seg2, seg3, seg4, seg5, seg6, seg7, seg8 = _gen_segments(params)
 
-    routes = [Route(seg1, Connection(seg1, seg2, s), seg2), Route(seg1, Connection(seg1, seg5, s), seg5),
-              Route(seg1, Connection(seg1, seg8, s), seg8), Route(seg3, Connection(seg3, seg5, s), seg5),
-              Route(seg3, Connection(seg3, seg4, s), seg4), Route(seg3, Connection(seg3, seg8, s), seg8),
-              Route(seg6, Connection(seg6, seg4, s), seg4), Route(seg6, Connection(seg6, seg2, s), seg2),
-              Route(seg6, Connection(seg6, seg8, s), seg8), Route(seg7, Connection(seg7, seg2, s), seg2),
-              Route(seg7, Connection(seg7, seg4, s), seg4), Route(seg7, Connection(seg7, seg5, s), seg5)]
+    routes = [Route(0, seg1, Connection(seg1, seg2, s), seg2), Route(1, seg1, Connection(seg1, seg5, s), seg5),
+              Route(2, seg1, Connection(seg1, seg8, s), seg8), Route(3, seg3, Connection(seg3, seg5, s), seg5),
+              Route(4, seg3, Connection(seg3, seg4, s), seg4), Route(5, seg3, Connection(seg3, seg8, s), seg8),
+              Route(6, seg6, Connection(seg6, seg4, s), seg4), Route(7, seg6, Connection(seg6, seg2, s), seg2),
+              Route(8, seg6, Connection(seg6, seg8, s), seg8), Route(9, seg7, Connection(seg7, seg2, s), seg2),
+              Route(10, seg7, Connection(seg7, seg4, s), seg4), Route(11, seg7, Connection(seg7, seg5, s), seg5)]
 
     return RoadMap(routes)
 
@@ -139,10 +139,14 @@ class Env(object):
 
         # set initial env
         self.vehicles[0] = Vehicle(self.road_map.routes[5], v=4, v_id=0, image_name="ego.png",
-                                   max_speed=5, max_acc=1, min_acc=-5)
+                                   max_speed=4, max_acc=1, min_acc=-3)
 
-        for i in range(1, self.max_vehicles):
-            self._add_random_vehicle(i)
+        self.vehicles[1] = Vehicle(self.road_map.routes[8], v=4, v_id=1, agent=TTC(len(self.action_space)),
+                                   image_name="other.png", max_acc=2, min_acc=-5, max_speed=4)
+        # self.vehicles[2] = Vehicle(self.road_map.routes[0], v=1, v_id=2, agent=TTC(len(self.action_space)),
+        #                            image_name="other.png", max_acc=1, min_acc=-3, max_speed=4)
+        # for i in range(1, self.max_vehicles):
+        #     self._add_random_vehicle(i)
 
         return self._get_observation(0)
 
@@ -205,7 +209,7 @@ class Env(object):
         route = random.choice(self.road_map.routes)
         v = random.randrange(2, route.seg1.max_speed)
         other = Vehicle(route, v, v_id=i, agent=TTC(len(self.action_space)), image_name="other.png",
-                        max_acc=2, min_acc=-5, max_speed=4)
+                        max_acc=1, min_acc=-3, max_speed=3)
         if not self._collide(other):
             self.vehicles[i] = other
 
@@ -230,13 +234,12 @@ class Env(object):
                 vehicle.step(a, self.dt)
 
     def _get_reward(self, done):
-        if done:
-            return 20000 if done == 1 else -20000
         ego = self.vehicles[0]
-        ra = -ego.action ** 2
-        rv = -4 * (ego.v - ego.get_max_speed()) ** 2
+        ra = -0.5 * ego.action ** 2
+        rv = ego.v
+        rc = -10 if done == -1 else 0
 
-        return ra + rv
+        return ra + rv + rc + 0.01
 
 
 def make(name):

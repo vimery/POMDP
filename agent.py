@@ -47,7 +47,7 @@ class TTC(Agent):
                 if v_id != ego.id:
                     o_x, o_y, _, _, _ = vehicle.forward(vehicle.action, dt)
                     if o_x and collide_detection(e_x, e_y, o_x, o_y, ego.radius, vehicle.radius):
-                        return True
+                        return vehicle.route.priority < ego.route.priority
         return False
 
     def get_action(self, ob):
@@ -89,6 +89,9 @@ class DQNAgent(Agent):
         else:
             return torch.tensor([[random.randrange(self.n_actions)]], device=self.device, dtype=torch.long)
 
+    def get_action_without_exploration(self, ob):
+        return self.policy_net(ob).max(1)[1].view(1,1)
+
     def learn(self):
         if len(self.memory) < self.batch_size:
             return
@@ -114,8 +117,8 @@ class DQNAgent(Agent):
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
-        # Compute Huber loss
-        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+        # Compute loss
+        loss = F.mse_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Optimize the model
         self.optimizer.zero_grad()
