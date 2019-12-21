@@ -1,4 +1,5 @@
 from Sim.tools import *
+import copy
 
 pi = math.pi
 h_pi = math.pi / 2
@@ -216,9 +217,9 @@ class Route:
 
     def __init__(self, r_id, seg1, conn, seg2):
         self.id = r_id
-        self.seg1 = seg1
-        self.conn = conn
-        self.seg2 = seg2
+        self.seg1 = copy.copy(seg1)
+        self.conn = copy.copy(conn)
+        self.seg2 = copy.copy(seg2)
         self.seg1.next_seg = self.conn
         self.conn.next_seg = self.seg2
         if conn.r == 0:

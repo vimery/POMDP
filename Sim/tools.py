@@ -76,10 +76,10 @@ class InterParam:
     """
     InterParam: parameters for constructing an intersection
     """
-    x_min = -30
-    x_max = 30
-    y_min = -30
-    y_max = 30
+    x_min = -20
+    x_max = 20
+    y_min = -20
+    y_max = 20
     inter_x = 0.0
     inter_y = 0.0
     inter_width = 10.0

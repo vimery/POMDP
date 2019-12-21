@@ -45,14 +45,14 @@ def learn():
 
     step_array = []
     reward_array = []
+    target_reward_array = []
 
-    num_episodes = 10000
+    num_episodes = 1000
 
     for i in range(num_episodes):
         cumulative_reward = 0
-        step = 0
         while True:
-            action = agent.get_action(_get_ob(ob, agent), step)
+            action = agent.get_action(_get_ob(ob, agent))
             new_ob, reward, done, step = env.step(action.item())
             new_ob = new_ob.get_array() if new_ob else None
             cumulative_reward += reward
@@ -71,11 +71,14 @@ def learn():
                 print(done, cumulative_reward)
                 break
         # Update the target network, copying all weights and biases in DQN
-        if i % agent.target_update == 0:
-            agent.target_net.load_state_dict(agent.policy_net.state_dict())
+        # if i % agent.target_update == 0:
+        #     agent.target_net.load_state_dict(agent.policy_net.state_dict())
+        #     if i > 0:
+        #         target_reward_array.append(np.mean(reward_array[i - 20:i]))
 
     plot_array(step_array, "steps in Training", "episodes", "steps")
     plot_array(reward_array, "rewards in Training", "episodes", "reward")
+    # plot_array(target_reward_array, "mean_rewards in Training", "episodes/20", "reward")
     agent.save(MODEL_PATH)
     env.close()
 
@@ -86,7 +89,7 @@ def valid():
     agent = DQNAgent(sum([len(l) for l in ob]), len(env.action_space))
     agent.load(MODEL_PATH)
 
-    num_episodes = 100
+    num_episodes = 1
     collide_times = 0
     timeout_times = 0
     reward_array = []
@@ -99,7 +102,7 @@ def valid():
             ob = ob.get_array() if ob else None
             cumulative_reward += reward
 
-            # env.render()
+            env.render()
             if done:
                 ob = env.reset().get_array()
                 collide_times += done == -1

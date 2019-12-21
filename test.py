@@ -1,39 +1,48 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
+from torch.autograd import Variable
 import torch.nn.functional as F
+import numpy as np
+import gym
+from agent import DQNAgent
+import torch
 
+# 超参数
+BATCH_SIZE = 32
+LR = 0.01  # learning rate
+EPSILON = 0.9  # 最优选择动作百分比
+GAMMA = 0.9  # 奖励递减参数
+TARGET_REPLACE_ITER = 100  # Q 现实网络的更新频率
+MEMORY_CAPACITY = 2000  # 记忆库大小
+env = gym.make('CartPole-v0')  # 立杆子游戏
+env = env.unwrapped
 
-class Net(nn.Module):
+dqn = DQNAgent(env.observation_space.shape[0], env.action_space.n)
+for i_episode in range(400):
+    s = torch.tensor([env.reset().data], dtype=torch.float)
+    r_s = 0
+    while True:
+        # env.render()  # 显示实验动画
+        a = dqn.get_action(s)
 
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(3, 2)
-        self.fc2 = nn.Linear(2, 1)
+        # 选动作, 得到环境反馈
+        s_, _, done, info = env.step(a.item())
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        # 修改 reward, 使 DQN 快速学习
+        x, x_dot, theta, theta_dot = s_
+        r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
+        r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
+        r_s += r1 + r2
+        r = torch.tensor([r1 + r2], dtype=torch.float64)
 
+        s_ = torch.tensor([s_.data], dtype=torch.float)
+        # 存记忆
+        dqn.memory.push(s, a, s_, r)
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+        dqn.learn()
 
-net = Net()
-net = net.to(device)
+        if done:  # 如果回合结束, 进入下回合
+            print('Ep: ', i_episode, '| Ep_r: ', round(r_s, 2))
+            break
 
-criterion = nn.MSELoss()
-optimizer = optim.Adam(net.parameters(), lr=0.01)
-
-inputs = torch.tensor([[i, i ** 2, i ** 3] for i in range(10)], dtype=torch.float).to(device)
-targets = torch.tensor([3 + 2 * i[1] + i[2] for i in inputs], dtype=torch.float).to(device)
-targets = targets.view(-1, 1)
-for i in range(5000):
-    optimizer.zero_grad()
-
-    output = net(inputs).to(device)
-    loss = criterion(output, targets).to(device)
-    loss.backward()
-    optimizer.step()
-
-    print(loss.item())
+        s = s_
