@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import gym
-
+from learnRL import plot_array
 # Hyper Parameters
 BATCH_SIZE = 32
 LR = 0.01  # learning rate
@@ -99,12 +99,13 @@ class DQN(object):
 
 dqn = DQN()
 
+r_a = []
 print('\nCollecting experience...')
 for i_episode in range(400):
     s = env.reset()
     ep_r = 0
     while True:
-        env.render()
+        # env.render()
         a = dqn.choose_action(s)
 
         # take action
@@ -122,9 +123,10 @@ for i_episode in range(400):
         if dqn.memory_counter > MEMORY_CAPACITY:
             dqn.learn()
             if done:
-                print('Ep: ', i_episode,
-                      '| Ep_r: ', round(ep_r, 2))
+                print('Ep: ', i_episode, '| Ep_r: ', round(ep_r, 2))
 
         if done:
+            r_a.append(round(ep_r, 2))
             break
         s = s_
+plot_array(r_a, "reward", "EP", "reward")

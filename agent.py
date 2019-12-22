@@ -66,30 +66,31 @@ class DQNAgent(Agent):
 
     def __init__(self, n_features, n_actions):
         super().__init__()
-        self.lr = 1e-2
-        self.EPS_START = 0.9
-        self.EPS_END = 0.1
+        self.lr = 1e-4
+        self.EPS_START = 1
+        self.EPS_END = 0.05
         self.EPS_DECAY = 500
-        self.batch_size = 32
-        self.gamma = 0.9
+        self.batch_size = 256
+        self.gamma = 0.999
         self.target_update = 100
-        # self.step = 0
+        self.memory_capacity = 10000
+        self.step = 0
         self.learn_count = 0
         self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
         self.n_actions = n_actions
         self.policy_net = NN(n_features, n_actions).to(self.device)
         self.target_net = NN(n_features, n_actions).to(self.device)
-        self.memory = ReplayMemory(2000)
+        self.memory = ReplayMemory(self.memory_capacity)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
         self.loss_fn = nn.MSELoss()
 
     def get_action(self, ob):  # ob: 1 * n_features
         sample = random.random()
-        eps_threshold = 0.1  # self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1 * self.step / self.EPS_DECAY)
-        # self.step += 1
+        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1 * self.step / self.EPS_DECAY)
+        self.step += 1
         if sample > eps_threshold:
             with torch.no_grad():
-                return self.policy_net(ob).max(1)[1].view(1, 1)
+                return self.policy_net(ob).max(1)[1].view(1, 1)  #
         else:
             return torch.tensor([[random.randrange(self.n_actions)]], device=self.device, dtype=torch.long)
 
@@ -97,7 +98,7 @@ class DQNAgent(Agent):
         return self.policy_net(ob).max(1)[1].view(1, 1)
 
     def learn(self):
-        if len(self.memory) < self.batch_size:
+        if len(self.memory) < self.memory_capacity:
             return
         self.learn_count += 1
         transitions = self.memory.sample(self.batch_size)
@@ -112,15 +113,14 @@ class DQNAgent(Agent):
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
 
-        # compute Q(s_t, a)
+        # compute Q(s_t, a;\theta)
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
-        # compute Q(s_{t+1}, a)
+        # compute Q(s_{t+1}, /argmax(Q(s_t, a;\theta);\theta^-)
         next_state_values = torch.zeros(self.batch_size, device=self.device)
-        # max_action_batch = self.policy_net(non_final_next_states).max(1)[1].unsqueeze(1)
-        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
-        # next_state_values[non_final_mask] = self.target_net(non_final_next_states).gather(1, max_action_batch).squeeze(
-        #     1)
+        m_action_batch = self.policy_net(non_final_next_states).detach().max(1)[1].unsqueeze(1)
+        # next_state_values[non_final_mask] = self.target_net(non_final_next_states).detach().max(1)[0]
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).gather(1, m_action_batch).squeeze(1)
 
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch

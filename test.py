@@ -6,7 +6,7 @@ import numpy as np
 import gym
 from agent import DQNAgent
 import torch
-
+from learnRL import plot_array
 # 超参数
 BATCH_SIZE = 32
 LR = 0.01  # learning rate
@@ -18,6 +18,7 @@ env = gym.make('CartPole-v0')  # 立杆子游戏
 env = env.unwrapped
 
 dqn = DQNAgent(env.observation_space.shape[0], env.action_space.n)
+r_a = []
 for i_episode in range(400):
     s = torch.tensor([env.reset().data], dtype=torch.float)
     r_s = 0
@@ -33,7 +34,7 @@ for i_episode in range(400):
         r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
         r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
         r_s += r1 + r2
-        r = torch.tensor([r1 + r2], dtype=torch.float64)
+        r = torch.tensor([r1 + r2], dtype=torch.float)
 
         s_ = torch.tensor([s_.data], dtype=torch.float)
         # 存记忆
@@ -43,6 +44,8 @@ for i_episode in range(400):
 
         if done:  # 如果回合结束, 进入下回合
             print('Ep: ', i_episode, '| Ep_r: ', round(r_s, 2))
+            r_a.append(round(r_s, 2))
             break
 
         s = s_
+plot_array(r_a, "reward", "EP", "reward")

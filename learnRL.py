@@ -40,14 +40,14 @@ def learn():
     env = Sim.make("full")
     ob = env.reset().get_array()
     agent = DQNAgent(sum([len(l) for l in ob]), len(env.action_space))
-    if os.path.exists(MODEL_PATH):
-        agent.load(MODEL_PATH)
+    # if os.path.exists(MODEL_PATH):
+    #     agent.load(MODEL_PATH)
 
     step_array = []
     reward_array = []
     target_reward_array = []
 
-    num_episodes = 1000
+    num_episodes = 10000
 
     for i in range(num_episodes):
         cumulative_reward = 0
@@ -66,9 +66,10 @@ def learn():
 
             if done:
                 ob = env.reset().get_array()
-                step_array.append(step)
-                reward_array.append(cumulative_reward)
-                print(done, cumulative_reward)
+                if agent.step > agent.memory_capacity:
+                    step_array.append(step)
+                    reward_array.append(cumulative_reward)
+                    print(done, cumulative_reward)
                 break
         # Update the target network, copying all weights and biases in DQN
         # if i % agent.target_update == 0:
@@ -105,11 +106,12 @@ def valid():
             env.render()
             if done:
                 ob = env.reset().get_array()
-                collide_times += done == -1
-                timeout_times += done == -2
-                reward_array.append(cumulative_reward)
-                step_array.append(step)
-                print(done, cumulative_reward)
+                if i > agent.memory_capacity:
+                    collide_times += done == -1
+                    timeout_times += done == -2
+                    reward_array.append(cumulative_reward)
+                    step_array.append(step)
+                    print(done, cumulative_reward)
                 break
     print("Total episodes in test: {}".format(num_episodes))
     print("collide rate: {}".format(collide_times / num_episodes))
