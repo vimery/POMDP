@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 
 import Sim
-import os
 from agent import *
 
 MODEL_PATH = "data/DQN"
@@ -45,7 +44,7 @@ def learn():
 
     step_array = []
     reward_array = []
-    target_reward_array = []
+    average_reward = []
 
     num_episodes = 10000
 
@@ -71,15 +70,9 @@ def learn():
                     reward_array.append(cumulative_reward)
                     print(done, cumulative_reward)
                 break
-        # Update the target network, copying all weights and biases in DQN
-        # if i % agent.target_update == 0:
-        #     agent.target_net.load_state_dict(agent.policy_net.state_dict())
-        #     if i > 0:
-        #         target_reward_array.append(np.mean(reward_array[i - 20:i]))
 
     plot_array(step_array, "steps in Training", "episodes", "steps")
     plot_array(reward_array, "rewards in Training", "episodes", "reward")
-    # plot_array(target_reward_array, "mean_rewards in Training", "episodes/20", "reward")
     agent.save(MODEL_PATH)
     env.close()
 
@@ -106,12 +99,11 @@ def valid():
             env.render()
             if done:
                 ob = env.reset().get_array()
-                if i > agent.memory_capacity:
-                    collide_times += done == -1
-                    timeout_times += done == -2
-                    reward_array.append(cumulative_reward)
-                    step_array.append(step)
-                    print(done, cumulative_reward)
+                collide_times += done == -1
+                timeout_times += done == -2
+                reward_array.append(cumulative_reward)
+                step_array.append(step)
+                print(done, cumulative_reward)
                 break
     print("Total episodes in test: {}".format(num_episodes))
     print("collide rate: {}".format(collide_times / num_episodes))

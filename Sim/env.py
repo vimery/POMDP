@@ -112,8 +112,8 @@ class Env(object):
     def __init__(self, params):
         self.road_map = None
         self.vehicles = {}
-        self.max_vehicles = 5
-        self.action_space = [-5, -1, 0, 1]
+        self.max_vehicles = 2
+        self.action_space = [-2, -1, -0.5, 0, 0.5, 1]
         self.dt = 0.1  # s, interval
         self.steps = 0
         self.max_steps = 150
@@ -139,9 +139,9 @@ class Env(object):
         self.vehicles[0] = Vehicle(self.road_map.routes[5], v=4, v_id=0, image_name="ego.png",
                                    max_speed=4, max_acc=1, min_acc=-3)
 
-        self.vehicles[1] = Vehicle(self.road_map.routes[2], v=4, v_id=1, agent=TTC(len(self.action_space)),
-                                   image_name="other.png", max_acc=2, min_acc=-5, max_speed=4)
-        self.vehicles[2] = Vehicle(self.road_map.routes[0], v=3, v_id=2, agent=TTC(len(self.action_space)),
+        # self.vehicles[1] = Vehicle(self.road_map.routes[2], v=4, v_id=1, agent=TTC(len(self.action_space)),
+        #                            image_name="other.png", max_acc=2, min_acc=-5, max_speed=4)
+        self.vehicles[1] = Vehicle(self.road_map.routes[0], v=3, v_id=1, agent=TTC(len(self.action_space)),
                                    image_name="other.png", max_acc=1, min_acc=-3, max_speed=3)
         # for i in range(1, self.max_vehicles):
         #     self._add_random_vehicle(i)
@@ -235,9 +235,15 @@ class Env(object):
         ego = self.vehicles[0]
         ra = -0.1 * ego.action ** 2
         rv = -0.1 * (ego.v - ego.get_max_speed()) ** 2
-        rc = -100 if done == -1 else 0
-
-        return ra + rv + rc - 0.01
+        if done == 1:
+            rd = 100
+        elif done == -1:
+            rd = -20
+        elif done == -2:
+            rd = -10
+        else:
+            rd = 0
+        return ra + rv + rd - 0.01
 
 
 def make(name):

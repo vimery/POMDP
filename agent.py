@@ -42,7 +42,8 @@ class TTC(Agent):
             for v_id, vehicle in ob.vehicles.items():
                 if v_id != ego.id:
                     o_x, o_y, _, _, _ = vehicle.forward(vehicle.action, dt)
-                    if o_x and collide_detection(e_x, e_y, o_x, o_y, ego.radius, vehicle.radius):
+                    if o_x and collide_detection(e_x, e_y, o_x, o_y, ego.radius + ego.safe_distance,
+                                                 vehicle.radius + vehicle.safe_distance):
                         return vehicle.route.priority <= ego.route.priority
         return False
 
@@ -69,11 +70,11 @@ class DQNAgent(Agent):
         self.lr = 1e-4
         self.EPS_START = 1
         self.EPS_END = 0.05
-        self.EPS_DECAY = 500
-        self.batch_size = 256
+        self.EPS_DECAY = 1000
+        self.batch_size = 512
         self.gamma = 0.999
         self.target_update = 100
-        self.memory_capacity = 10000
+        self.memory_capacity = 100000
         self.step = 0
         self.learn_count = 0
         self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
@@ -147,60 +148,63 @@ class DQNAgent(Agent):
         self.policy_net.load_state_dict(torch.load(path))
 
 
-class DDPGAgent(Agent):
-
-    def __init__(self, n_features, n_actions):
-        super().__init__()
-        self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
-        self.actor_eval = NN(n_features, n_actions).to(self.device)
-        self.actor_target = NN(n_features, n_actions).to(self.device)
-        self.critic_eval = NN(n_features, n_actions).to(self.device)
-        self.critic_target = NN(n_features, n_actions).to(self.device)
-
-        self.a_opt = optim.Adam(self.actor_eval.parameters(), lr=1e-4)
-        self.c_opt = optim.Adam(self.critic_eval.parameters(), lr=1e-4)
-        self.loss_td = nn.MSELoss()
-
-        self.memory = ReplayMemory(10000)
-        self.gamma = 0.999
-        self.target_update = 10
-        self.batch_size = 200
-
-    def get_action(self, ob):
-        return self.actor_eval(ob)[0].detach()
-
-    def learn(self):
-        if len(self.memory) < self.batch_size:
-            return
-        transitions = self.memory.sample(self.batch_size)
-        batch = Transition(*zip(*transitions))
-
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device,
-                                      dtype=torch.bool)
-
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
-
-        # get actions
-        actions = self.actor_eval(state_batch).gather(1, action_batch)
-        # compute Q(s_t, a)
-        state_action_values = self.critic_eval(state_batch).gather(1, action_batch)
-
+# class DDPGAgent(Agent):
+#
+#     def __init__(self, n_features, n_actions):
+#         super().__init__()
+#         self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
+#         self.actor_eval = NN(n_features, n_actions).to(self.device)
+#         self.actor_target = NN(n_features, n_actions).to(self.device)
+#         self.critic_eval = NN(n_features, n_actions).to(self.device)
+#         self.critic_target = NN(n_features, n_actions).to(self.device)
+#
+#         self.a_opt = optim.Adam(self.actor_eval.parameters(), lr=1e-4)
+#         self.c_opt = optim.Adam(self.critic_eval.parameters(), lr=1e-4)
+#         self.loss_td = nn.MSELoss()
+#
+#         self.memory = ReplayMemory(10000)
+#         self.gamma = 0.999
+#         self.target_update = 10
+#         self.batch_size = 200
+#
+#     def get_action(self, ob):
+#         return self.actor_eval(ob)[0].detach()
+#
+#     def learn(self):
+#         if len(self.memory) < self.batch_size:
+#             return
+#         transitions = self.memory.sample(self.batch_size)
+#         batch = Transition(*zip(*transitions))
+#
+#         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device,
+#                                       dtype=torch.bool)
+#
+#         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+#
+#         state_batch = torch.cat(batch.state)
+#         action_batch = torch.cat(batch.action)
+#         reward_batch = torch.cat(batch.reward)
+#
+#         # get actions
+#         actions = self.actor_eval(state_batch).gather(1, action_batch)
+#         # compute Q(s_t, a)
+#         state_action_values = self.critic_eval(state_batch).gather(1, action_batch)
+#
 
 class NN(nn.Module):
 
     def __init__(self, n_features, n_actions):
         super().__init__()
-        self.fc1 = nn.Linear(n_features, 50)
+        self.fc1 = nn.Linear(n_features, 64)
         self.fc1.weight.data.normal_(0, 0.1)
-        self.out = nn.Linear(50, n_actions)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc2.weight.data.normal_(0, 0.1)
+        self.out = nn.Linear(64, n_actions)
         self.out.weight.data.normal_(0, 0.1)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
         x = self.out(x)
         return x
 
@@ -228,3 +232,71 @@ class ReplayMemory(object):
 
     def __len__(self):
         return len(self.memory)
+
+
+class SumTree(object):
+    """
+    This SumTree code copies from
+    https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow/blob/master/contents/5.2_Prioritized_Replay_DQN/RL_brain.py
+    Story data with its priority in the tree.
+    """
+    data_pointer = 0
+
+    def __init__(self, capacity):
+        self.capacity = capacity  # for all priority values
+        self.tree = np.zeros(2 * capacity - 1)
+        # [--------------Parent nodes-------------][-------leaves to recode priority-------]
+        #             size: capacity - 1                       size: capacity
+        self.data = np.zeros(capacity, dtype=object)  # for all transitions
+        # [--------------data frame-------------]
+        #             size: capacity
+
+    def add(self, p, data):
+        tree_idx = self.data_pointer + self.capacity - 1
+        self.data[self.data_pointer] = data  # update data_frame
+        self.update(tree_idx, p)  # update tree_frame
+
+        self.data_pointer += 1
+        if self.data_pointer >= self.capacity:  # replace when exceed the capacity
+            self.data_pointer = 0
+
+    def update(self, tree_idx, p):
+        change = p - self.tree[tree_idx]
+        self.tree[tree_idx] = p
+        # then propagate the change through tree
+        while tree_idx != 0:  # this method is faster than the recursive loop in the reference code
+            tree_idx = (tree_idx - 1) // 2
+            self.tree[tree_idx] += change
+
+    def get_leaf(self, v):
+        """
+        Tree structure and array storage:
+        Tree index:
+             0         -> storing priority sum
+            / \
+          1     2
+         / \   / \
+        3   4 5   6    -> storing priority for transitions
+        Array type for storing:
+        [0,1,2,3,4,5,6]
+        """
+        parent_idx = 0
+        while True:  # the while loop is faster than the method in the reference code
+            cl_idx = 2 * parent_idx + 1  # this leaf's left and right kids
+            cr_idx = cl_idx + 1
+            if cl_idx >= len(self.tree):  # reach bottom, end search
+                leaf_idx = parent_idx
+                break
+            else:  # downward search, always search for a higher priority node
+                if v <= self.tree[cl_idx]:
+                    parent_idx = cl_idx
+                else:
+                    v -= self.tree[cl_idx]
+                    parent_idx = cr_idx
+
+        data_idx = leaf_idx - self.capacity + 1
+        return leaf_idx, self.tree[leaf_idx], self.data[data_idx]
+
+    @property
+    def total_p(self):
+        return self.tree[0]  # the root

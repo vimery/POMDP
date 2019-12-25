@@ -1,7 +1,6 @@
 import uuid
 
 from Sim.tools import *
-import torch
 
 
 class Vehicle:
@@ -25,6 +24,7 @@ class Vehicle:
         self.length = length
         self.width = width
         self.radius = math.sqrt(length ** 2 + width ** 2)  # actual height and width is 2 times in image
+        self.safe_distance = 0.2 * self.radius
         self.agent = agent
         self.exist = True
 
@@ -59,7 +59,7 @@ class Vehicle:
             action = self.min_acc
         # check speed limit
         v = self.v
-        max_v = self.get_max_speed()
+        max_v = self.max_speed
         if v + action * dt > max_v:
             acc_t = (max_v - v) / action
             acc_distance = (max_v + v) * acc_t / 2
@@ -84,6 +84,7 @@ class Vehicle:
             self._image = load_image(self._image_name, width=self.width, height=self.length)
         if self.exist:
             image = pg.transform.rotate(self._image, self.theta / math.pi * 180)
+            image.set_colorkey(Color.white, RLEACCEL)
             x, y = cartesian2py(self.x, self.y)
             rect = image.get_rect()
             rect = rect.move(x - rect.center[0], y - rect.center[1])

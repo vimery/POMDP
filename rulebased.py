@@ -15,7 +15,7 @@ def draw_st_fig(st, sp):
 
 
 def valid():
-    env = Sim.make("t")
+    env = Sim.make("full")
     ob = env.reset()
     agent = TTC(len(env.action_space))
     step_array = []

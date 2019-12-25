@@ -31,7 +31,10 @@ def load_image(name, width, height, color_key=Color.white):
 
 
 def collide_detection(x1, y1, x2, y2, r1, r2):
-    return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2) <= r1 + r2
+    x_collide = x1 + r1 >= x2 and x2 + r2 >= x1
+    y_collide = y1 + r1 >= y2 and y2 + r2 >= y1
+    # return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2) <= r1 + r2
+    return x_collide and y_collide
 
 
 def forward(x, y, theta, v, route, dt, max_v, a):
@@ -76,10 +79,10 @@ class InterParam:
     """
     InterParam: parameters for constructing an intersection
     """
-    x_min = -20
-    x_max = 20
-    y_min = -20
-    y_max = 20
+    x_min = -15
+    x_max = 15
+    y_min = -15
+    y_max = 15
     inter_x = 0.0
     inter_y = 0.0
     inter_width = 10.0
