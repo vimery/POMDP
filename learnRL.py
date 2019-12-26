@@ -45,9 +45,8 @@ def learn():
 
     reward_array = []
     average_reward = []
-    max_average = 0
 
-    num_episodes = 2000
+    num_episodes = 3000
     cur_ep = 0
 
     for i in range(num_episodes):
@@ -122,7 +121,7 @@ def valid():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(filename="result/report.log", filemode="a")
+    logging.basicConfig(level=logging.INFO, filename="result/report.log", filemode="w")
     logging.info("===================== training begins ============================")
     learn()
     logging.info("===================== testing begins  ============================")
