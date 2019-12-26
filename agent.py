@@ -64,17 +64,17 @@ class Constant(Agent):
 
 
 class DQNAgent(Agent):
+    eps_start = 1
+    eps_end = 0.1
+    eps_decay = 1000
+    batch_size = 256
+    gamma = 0.99
+    lr = 1e-3
+    target_update = 100
+    memory_capacity = 10000
 
-    def __init__(self, n_features, n_actions):
+    def __init__(self, n_features, n_actions, prioritized=True):
         super().__init__()
-        self.lr = 1e-4
-        self.EPS_START = 1
-        self.EPS_END = 0.05
-        self.EPS_DECAY = 1000
-        self.batch_size = 512
-        self.gamma = 0.999
-        self.target_update = 100
-        self.memory_capacity = 100000
         self.step = 0
         self.learn_count = 0
         self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
@@ -83,15 +83,16 @@ class DQNAgent(Agent):
         self.target_net = NN(n_features, n_actions).to(self.device)
         self.memory = ReplayMemory(self.memory_capacity)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
-        self.loss_fn = nn.MSELoss()
+
+        self.prioritized = prioritized
 
     def get_action(self, ob):  # ob: 1 * n_features
         sample = random.random()
-        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1 * self.step / self.EPS_DECAY)
+        eps_threshold = self.eps_end + (self.eps_start - self.eps_end) * math.exp(-1 * self.step / self.eps_decay)
         self.step += 1
         if sample > eps_threshold:
             with torch.no_grad():
-                return self.policy_net(ob).max(1)[1].view(1, 1)  #
+                return self.policy_net(ob).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[random.randrange(self.n_actions)]], device=self.device, dtype=torch.long)
 
@@ -102,7 +103,10 @@ class DQNAgent(Agent):
         if len(self.memory) < self.memory_capacity:
             return
         self.learn_count += 1
-        transitions = self.memory.sample(self.batch_size)
+        if self.prioritized:
+            indexes, transitions, weights = self.memory.sample(self.batch_size)
+        else:
+            transitions = self.memory.sample(self.batch_size)
         batch = Transition(*zip(*transitions))
 
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device,
@@ -127,7 +131,13 @@ class DQNAgent(Agent):
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
         # Compute loss
-        loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
+        if self.prioritized:
+            td_errors = state_action_values - expected_state_action_values.unsqueeze(1)
+            loss = torch.abs(td_errors) * torch.from_numpy(weights).to(device=self.device)
+            loss = loss.mean()
+            self.memory.update(indexes, np.abs(td_errors.detach().cpu().numpy()))
+        else:
+            loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Optimize the model
         self.optimizer.zero_grad()
@@ -136,7 +146,7 @@ class DQNAgent(Agent):
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
-        # Update the target network, copying all weights and biases in DQN
+        # Update the target network, copying all weights and biases in DDQNP
         if self.learn_count % self.target_update == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
         return loss
@@ -147,49 +157,6 @@ class DQNAgent(Agent):
     def load(self, path):
         self.policy_net.load_state_dict(torch.load(path))
 
-
-# class DDPGAgent(Agent):
-#
-#     def __init__(self, n_features, n_actions):
-#         super().__init__()
-#         self.device = torch.device("cuda:1" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else "cpu")
-#         self.actor_eval = NN(n_features, n_actions).to(self.device)
-#         self.actor_target = NN(n_features, n_actions).to(self.device)
-#         self.critic_eval = NN(n_features, n_actions).to(self.device)
-#         self.critic_target = NN(n_features, n_actions).to(self.device)
-#
-#         self.a_opt = optim.Adam(self.actor_eval.parameters(), lr=1e-4)
-#         self.c_opt = optim.Adam(self.critic_eval.parameters(), lr=1e-4)
-#         self.loss_td = nn.MSELoss()
-#
-#         self.memory = ReplayMemory(10000)
-#         self.gamma = 0.999
-#         self.target_update = 10
-#         self.batch_size = 200
-#
-#     def get_action(self, ob):
-#         return self.actor_eval(ob)[0].detach()
-#
-#     def learn(self):
-#         if len(self.memory) < self.batch_size:
-#             return
-#         transitions = self.memory.sample(self.batch_size)
-#         batch = Transition(*zip(*transitions))
-#
-#         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device,
-#                                       dtype=torch.bool)
-#
-#         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-#
-#         state_batch = torch.cat(batch.state)
-#         action_batch = torch.cat(batch.action)
-#         reward_batch = torch.cat(batch.reward)
-#
-#         # get actions
-#         actions = self.actor_eval(state_batch).gather(1, action_batch)
-#         # compute Q(s_t, a)
-#         state_action_values = self.critic_eval(state_batch).gather(1, action_batch)
-#
 
 class NN(nn.Module):
 
@@ -214,32 +181,51 @@ Transition = namedtuple('Transition',
 
 
 class ReplayMemory(object):
+    epsilon = 1e-4
+    alpha = 0.6
+    beta = 0.4
+    beta_increment_per_sampling = 1e-5
+    size = 0
 
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
+    def __init__(self, capacity, prioritized=True):
+
+        self.tree = SumTree(capacity)
+        self.prioritized = prioritized
 
     def push(self, *args):
-        """Saves a transition"""
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = Transition(*args)
-        self.position = (self.position + 1) % self.capacity
+        self.size += 1 if self.size < self.tree.capacity else 0
+        max_p = self.tree.max()
+        if max_p <= 0:
+            max_p = 1
+        self.tree.add(max_p, Transition(*args))
+        # if self.size > self.tree.capacity:
+        #     self.size %= self.tree.capacity
 
     def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+        trans_list = np.empty(batch_size, dtype=object)
+        indexes = np.empty(batch_size, dtype='int')
+        weights = np.empty(batch_size, dtype='float32')
+        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
+        for i, rand in enumerate(np.random.uniform(0, self.tree.total_p, batch_size)):
+            idx, p, data = self.tree.get(rand)
+            trans_list[i] = data
+            indexes[i] = idx
+            weights[i] = np.power(self.tree.capacity * p / self.tree.total_p, -self.beta)
+        return indexes, trans_list, weights / np.max(weights)
+
+    def update(self, idx, err):
+        ps = self._get_priority(err)
+        for ti, p in zip(idx, ps):
+            self.tree.update(ti, p)
+
+    def _get_priority(self, td_error):
+        return np.power(td_error + self.epsilon, self.alpha)
 
     def __len__(self):
-        return len(self.memory)
+        return self.size
 
 
 class SumTree(object):
-    """
-    This SumTree code copies from
-    https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow/blob/master/contents/5.2_Prioritized_Replay_DQN/RL_brain.py
-    Story data with its priority in the tree.
-    """
     data_pointer = 0
 
     def __init__(self, capacity):
@@ -250,9 +236,10 @@ class SumTree(object):
         self.data = np.zeros(capacity, dtype=object)  # for all transitions
         # [--------------data frame-------------]
         #             size: capacity
+        self.index_leaf_start = capacity - 1
 
     def add(self, p, data):
-        tree_idx = self.data_pointer + self.capacity - 1
+        tree_idx = self.data_pointer + self.index_leaf_start
         self.data[self.data_pointer] = data  # update data_frame
         self.update(tree_idx, p)  # update tree_frame
 
@@ -264,11 +251,11 @@ class SumTree(object):
         change = p - self.tree[tree_idx]
         self.tree[tree_idx] = p
         # then propagate the change through tree
-        while tree_idx != 0:  # this method is faster than the recursive loop in the reference code
+        while tree_idx != 0:
             tree_idx = (tree_idx - 1) // 2
             self.tree[tree_idx] += change
 
-    def get_leaf(self, v):
+    def get(self, v):
         """
         Tree structure and array storage:
         Tree index:
@@ -281,21 +268,24 @@ class SumTree(object):
         [0,1,2,3,4,5,6]
         """
         parent_idx = 0
-        while True:  # the while loop is faster than the method in the reference code
-            cl_idx = 2 * parent_idx + 1  # this leaf's left and right kids
-            cr_idx = cl_idx + 1
-            if cl_idx >= len(self.tree):  # reach bottom, end search
+        while True:
+            left = 2 * parent_idx + 1
+            right = left + 1
+            if left >= len(self.tree):  # reach bottom, end search
                 leaf_idx = parent_idx
                 break
             else:  # downward search, always search for a higher priority node
-                if v <= self.tree[cl_idx]:
-                    parent_idx = cl_idx
+                if v <= self.tree[left]:
+                    parent_idx = left
                 else:
-                    v -= self.tree[cl_idx]
-                    parent_idx = cr_idx
+                    v -= self.tree[left]
+                    parent_idx = right
 
         data_idx = leaf_idx - self.capacity + 1
         return leaf_idx, self.tree[leaf_idx], self.data[data_idx]
+
+    def max(self):
+        return np.max(self.tree[-self.capacity:])
 
     @property
     def total_p(self):

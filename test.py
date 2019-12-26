@@ -7,6 +7,7 @@ import gym
 from agent import DQNAgent
 import torch
 from learnRL import plot_array
+
 # 超参数
 BATCH_SIZE = 32
 LR = 0.01  # learning rate
@@ -29,7 +30,7 @@ for i_episode in range(400):
         # 选动作, 得到环境反馈
         s_, _, done, info = env.step(a.item())
 
-        # 修改 reward, 使 DQN 快速学习
+        # 修改 reward, 使 DDQNP 快速学习
         x, x_dot, theta, theta_dot = s_
         r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
         r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
@@ -43,8 +44,9 @@ for i_episode in range(400):
         dqn.learn()
 
         if done:  # 如果回合结束, 进入下回合
-            print('Ep: ', i_episode, '| Ep_r: ', round(r_s, 2))
-            r_a.append(round(r_s, 2))
+            if len(dqn.memory) == dqn.memory_capacity:
+                print('Ep: ', i_episode, '| Ep_r: ', round(r_s, 2))
+                r_a.append(round(r_s, 2))
             break
 
         s = s_

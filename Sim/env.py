@@ -137,12 +137,13 @@ class Env(object):
 
         # set initial env
         self.vehicles[0] = Vehicle(self.road_map.routes[5], v=4, v_id=0, image_name="ego.png",
-                                   max_speed=4, max_acc=1, min_acc=-3)
+                                   max_speed=4, max_acc=1, min_acc=-2)
 
         # self.vehicles[1] = Vehicle(self.road_map.routes[2], v=4, v_id=1, agent=TTC(len(self.action_space)),
         #                            image_name="other.png", max_acc=2, min_acc=-5, max_speed=4)
-        self.vehicles[1] = Vehicle(self.road_map.routes[0], v=3, v_id=1, agent=TTC(len(self.action_space)),
-                                   image_name="other.png", max_acc=1, min_acc=-3, max_speed=3)
+        self.vehicles[1] = Vehicle(self.road_map.routes[0], v=random.randrange(2, 4), v_id=1,
+                                   agent=TTC(len(self.action_space)),
+                                   image_name="other.png", max_acc=1, min_acc=-2, max_speed=random.randint(3, 5))
         # for i in range(1, self.max_vehicles):
         #     self._add_random_vehicle(i)
 
@@ -207,7 +208,7 @@ class Env(object):
         route = random.choice(self.road_map.routes)
         v = random.randrange(2, route.seg1.max_speed)
         other = Vehicle(route, v, v_id=i, agent=TTC(len(self.action_space)), image_name="other.png",
-                        max_acc=1, min_acc=-3, max_speed=3)
+                        max_acc=1, min_acc=-2, max_speed=4)
         if not self._collide(other):
             self.vehicles[i] = other
 

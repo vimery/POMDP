@@ -124,9 +124,9 @@ for i_episode in range(400):
             dqn.learn()
             if done:
                 print('Ep: ', i_episode, '| Ep_r: ', round(ep_r, 2))
+                r_a.append(round(ep_r, 2))
 
         if done:
-            r_a.append(round(ep_r, 2))
             break
         s = s_
-plot_array(r_a, "reward", "EP", "reward")
+plot_array(r_a, "reward1", "EP", "reward")

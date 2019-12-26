@@ -2,8 +2,9 @@ import matplotlib.pyplot as plt
 
 import Sim
 from agent import *
+import logging
 
-MODEL_PATH = "data/DQN"
+MODEL_PATH = "data/DDQNP"
 PIC_PATH = "result/"
 
 
@@ -42,11 +43,12 @@ def learn():
     # if os.path.exists(MODEL_PATH):
     #     agent.load(MODEL_PATH)
 
-    step_array = []
     reward_array = []
     average_reward = []
+    max_average = 0
 
-    num_episodes = 10000
+    num_episodes = 2000
+    cur_ep = 0
 
     for i in range(num_episodes):
         cumulative_reward = 0
@@ -64,15 +66,17 @@ def learn():
             # env.render()
 
             if done:
+                cur_ep += 1
                 ob = env.reset().get_array()
-                if agent.step > agent.memory_capacity:
-                    step_array.append(step)
-                    reward_array.append(cumulative_reward)
-                    print(done, cumulative_reward)
+                reward_array.append(cumulative_reward)
+                logging.info("EP:{} done:{} r:{}".format(cur_ep, done, cumulative_reward))
+                if cur_ep % agent.target_update == 0:
+                    mean = np.mean(reward_array[cur_ep - agent.target_update])
+                    average_reward.append(mean)
                 break
 
-    plot_array(step_array, "steps in Training", "episodes", "steps")
     plot_array(reward_array, "rewards in Training", "episodes", "reward")
+    plot_array(average_reward, "average rewards in Training", "episodes*{}".format(agent.target_update), "reward")
     agent.save(MODEL_PATH)
     env.close()
 
@@ -83,39 +87,43 @@ def valid():
     agent = DQNAgent(sum([len(l) for l in ob]), len(env.action_space))
     agent.load(MODEL_PATH)
 
-    num_episodes = 1
+    num_episodes = 100
     collide_times = 0
     timeout_times = 0
     reward_array = []
-    step_array = []
+    # step_array = []
+    speed_array = []
     for i in range(num_episodes):
         cumulative_reward = 0
         while True:
             action = agent.get_action_without_exploration(_get_ob(ob, agent))
             ob, reward, done, step = env.step(action.item())
+            # speed_array.append(ob.ego.v if ob else None)
             ob = ob.get_array() if ob else None
             cumulative_reward += reward
 
-            env.render()
+            # env.render()
             if done:
                 ob = env.reset().get_array()
                 collide_times += done == -1
                 timeout_times += done == -2
                 reward_array.append(cumulative_reward)
-                step_array.append(step)
-                print(done, cumulative_reward)
+                # step_array.append(step)
+                logging.info("done:{}, reward:{}".format(done, cumulative_reward))
                 break
-    print("Total episodes in test: {}".format(num_episodes))
-    print("collide rate: {}".format(collide_times / num_episodes))
-    print("timeout rate: {}".format(timeout_times / num_episodes))
-    print("success rate: {}".format((num_episodes - collide_times - timeout_times) / num_episodes))
+    logging.info("Total episodes in test: {}".format(num_episodes))
+    logging.info("collide rate: {}".format(collide_times / num_episodes))
+    logging.info("timeout rate: {}".format(timeout_times / num_episodes))
+    logging.info("success rate: {}".format((num_episodes - collide_times - timeout_times) / num_episodes))
     plot_array(reward_array, "cumulative reward in test", "episodes", "reward")
-    plot_array(step_array, "steps in test", "episodes", "reward")
+    # plot_array(step_array, "steps in test", "episodes", "reward")
+    # plot_array(speed_array, "speed variation", "step", "speed")
     env.close()
 
 
 if __name__ == '__main__':
-    print("===================== training begins ============================")
+    logging.basicConfig(filename="result/report.log", filemode="a")
+    logging.info("===================== training begins ============================")
     learn()
-    print("===================== testing begins  ============================")
+    logging.info("===================== testing begins  ============================")
     valid()
